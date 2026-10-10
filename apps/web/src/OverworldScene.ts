@@ -158,7 +158,32 @@ export class OverworldScene extends Phaser.Scene {
     const wildSpecies = getSpecies(speciesId);
 
     this.logText.setText(`Wild ${wildSpecies.name} (Lv ${level}, ${wildSpecies.type}) appeared!`);
-    this.cameras.main.flash(300, 255, 255, 255);
+    this.cameras.main.flash(400, 255, 255, 255);
+
+    // Default starter party for player if not already created
+    const starterSpecies = getSpecies(1); // Emberpup
+    const maxHp = calculateMaxHp(starterSpecies.baseStats.hp, 5);
+    const starterMonster = {
+      id: 'starter-1',
+      speciesId: 1,
+      nickname: 'Emberpup',
+      level: 5,
+      xp: 0,
+      currentHp: maxHp,
+      maxHp,
+      moves: ['tackle', 'ember_nip'],
+      partySlot: 0
+    };
+
+    this.time.delayedCall(450, () => {
+      this.scene.pause('OverworldScene');
+      this.scene.launch('BattleScene', {
+        playerParty: [starterMonster],
+        wildSpeciesId: speciesId,
+        wildLevel: level,
+        returnScene: 'OverworldScene'
+      });
+    });
   }
 
   private renderTiles() {

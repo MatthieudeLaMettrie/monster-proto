@@ -1,10 +1,16 @@
 import Phaser from 'phaser';
 import { GalleryScene } from './GalleryScene.js';
 import { OverworldScene } from './OverworldScene.js';
+import { BattleScene } from './BattleScene.js';
 
 class BootScene extends Phaser.Scene {
   constructor() {
     super('BootScene');
+  }
+
+  preload() {
+    // Preload map data and initial sprites
+    this.load.json('worldMap', '/map.json');
   }
 
   create() {
@@ -72,7 +78,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
-  scene: [BootScene, OverworldScene, GalleryScene]
+  scene: [BootScene, OverworldScene, BattleScene, GalleryScene]
 };
 
 new Phaser.Game(config);
