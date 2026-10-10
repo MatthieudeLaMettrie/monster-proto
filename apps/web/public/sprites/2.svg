@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="grad" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FFB347" />
+      <stop offset="100%" stop-color="#F26B38" />
+    </radialGradient>
+  </defs>
+  <!-- Shadow -->
+  <ellipse cx="32" cy="58" rx="18" ry="4" fill="#000" opacity="0.2" />
+  
+  <!-- Motif background -->
+  <path d="M 32 10 Q 38 2 40 12 Q 44 4 48 18 Q 32 20 32 10 Z" fill="#D9381E" transform="scale(1) translate(0, 4)" />
+  <!-- Body shape -->
+  
+        <ellipse cx="32" cy="36" rx="20.900000000000002" ry="16.15" fill="url(#grad)" stroke="#111" stroke-width="2.5" />
+        <circle cx="16" cy="47.3" r="4" fill="#F26B38" stroke="#111" stroke-width="2" />
+        <circle cx="48" cy="47.3" r="4" fill="#F26B38" stroke="#111" stroke-width="2" />
+      
+  <!-- Eyes -->
+  
+    <circle cx="26" cy="32" r="3" fill="#FFF59D" stroke="#111" stroke-width="1.2" />
+    <circle cx="26.8" cy="32" r="1.2" fill="#111" />
+    <circle cx="38" cy="32" r="3" fill="#FFF59D" stroke="#111" stroke-width="1.2" />
+    <circle cx="38.8" cy="32" r="1.2" fill="#111" />
+  
+</svg>
