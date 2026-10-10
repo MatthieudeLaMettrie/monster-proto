@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GalleryScene } from './GalleryScene.js';
+import { OverworldScene } from './OverworldScene.js';
 
 class BootScene extends Phaser.Scene {
   constructor() {
@@ -7,30 +8,44 @@ class BootScene extends Phaser.Scene {
   }
 
   create() {
-    this.add.text(240, 70, 'Monster Proto', {
-      fontSize: '26px',
+    this.add.text(240, 50, 'Monster Proto', {
+      fontSize: '28px',
       color: '#fff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.add.text(240, 110, 'Milestone 2: 60 Procedural SVGs Ready', {
-      fontSize: '14px',
-      color: '#06d6a0'
+    this.add.text(240, 85, '2D Browser Monster Battle Prototype', {
+      fontSize: '13px',
+      color: '#94a3b8'
     }).setOrigin(0.5);
 
-    const btn = this.add.rectangle(240, 180, 220, 44, 0x3a86ff)
+    // Play button -> starts Overworld
+    const playBtn = this.add.rectangle(240, 150, 200, 42, 0x10b981)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.scene.start('OverworldScene');
+      });
+
+    this.add.text(240, 150, '▶ Start Adventure (Map)', {
+      fontSize: '14px',
+      color: '#fff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // Gallery button
+    const galleryBtn = this.add.rectangle(240, 205, 200, 42, 0x3b82f6)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         this.scene.start('GalleryScene');
       });
 
-    this.add.text(240, 180, 'Open Monster Gallery', {
-      fontSize: '15px',
+    this.add.text(240, 205, '📜 View 60 Monsters', {
+      fontSize: '14px',
       color: '#fff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    const statusText = this.add.text(240, 250, 'Backend API Check...', {
+    const statusText = this.add.text(240, 275, 'Connecting to Cloudflare API...', {
       fontSize: '12px',
       color: '#94a3b8'
     }).setOrigin(0.5);
@@ -38,11 +53,11 @@ class BootScene extends Phaser.Scene {
     fetch('/api/health')
       .then(res => res.json())
       .then(data => {
-        statusText.setText(`API Health: OK (${data.game})`);
+        statusText.setText(`Server Connected: ${data.game}`);
         statusText.setColor('#06d6a0');
       })
       .catch(() => {
-        statusText.setText('Running local client');
+        statusText.setText('Running offline local mode');
       });
   }
 }
@@ -52,12 +67,12 @@ const config: Phaser.Types.Core.GameConfig = {
   width: 480,
   height: 320,
   parent: 'game-container',
-  pixelArt: false,
+  pixelArt: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
-  scene: [BootScene, GalleryScene]
+  scene: [BootScene, OverworldScene, GalleryScene]
 };
 
 new Phaser.Game(config);
