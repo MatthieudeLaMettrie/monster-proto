@@ -17,5 +17,23 @@
       "database_id": "local-monster-db",
       "migrations_dir": "../../migrations"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LOBBY_DO",
+        "class_name": "LobbyRoom"
+      },
+      {
+        "name": "BATTLE_DO",
+        "class_name": "BattleRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["LobbyRoom", "BattleRoom"]
+    }
   ]
 }

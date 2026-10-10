@@ -1,8 +1,28 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ELEMENT_TYPES, SaveStateSchema } from '@monster-proto/shared';
+import { LobbyRoom } from './lobby.js';
+import { BattleRoom } from './battle.js';
+export { LobbyRoom, BattleRoom };
 const app = new Hono();
 app.use('*', cors());
+// Upgrade routing to Lobby DO
+app.get('/ws/lobby', async (c) => {
+    const id = c.env.LOBBY_DO.idFromName('global-lobby');
+    const obj = c.env.LOBBY_DO.get(id);
+    const url = new URL(c.req.url);
+    url.pathname = '/ws';
+    return obj.fetch(new Request(url.toString(), c.req.raw));
+});
+// Upgrade routing to Battle DO
+app.get('/ws/battle/:id', async (c) => {
+    const battleId = c.req.param('id');
+    const id = c.env.BATTLE_DO.idFromName(battleId);
+    const obj = c.env.BATTLE_DO.get(id);
+    const url = new URL(c.req.url);
+    url.pathname = '/ws';
+    return obj.fetch(new Request(url.toString(), c.req.raw));
+});
 // Health check
 app.get('/api/health', (c) => {
     return c.json({
