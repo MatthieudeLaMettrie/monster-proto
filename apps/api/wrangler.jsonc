@@ -9,5 +9,13 @@
   "assets": {
     "directory": "../web/dist",
     "binding": "ASSETS"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "monster-proto-db",
+      "database_id": "local-monster-db",
+      "migrations_dir": "../../migrations"
+    }
+  ]
 }

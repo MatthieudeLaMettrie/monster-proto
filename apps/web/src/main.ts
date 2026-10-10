@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { GalleryScene } from './GalleryScene.js';
 import { OverworldScene } from './OverworldScene.js';
 import { BattleScene } from './BattleScene.js';
+import { PartyScene } from './PartyScene.js';
+import { PersistenceManager } from './persistence.js';
 
 class BootScene extends Phaser.Scene {
   constructor() {
@@ -9,11 +11,12 @@ class BootScene extends Phaser.Scene {
   }
 
   preload() {
-    // Preload map data and initial sprites
     this.load.json('worldMap', '/map.json');
   }
 
-  create() {
+  async create() {
+    // Authenticate guest session
+    const session = await PersistenceManager.initSession();
     this.add.text(240, 50, 'Monster Proto', {
       fontSize: '28px',
       color: '#fff',
@@ -78,7 +81,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
-  scene: [BootScene, OverworldScene, BattleScene, GalleryScene]
+  scene: [BootScene, OverworldScene, BattleScene, PartyScene, GalleryScene]
 };
 
 new Phaser.Game(config);

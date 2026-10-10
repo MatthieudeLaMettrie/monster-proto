@@ -58,6 +58,16 @@ export class OverworldScene extends Phaser.Scene {
       padding: { x: 6, y: 3 }
     }).setScrollFactor(0).setDepth(100);
 
+    // Party & Dex button (Top-Right)
+    const partyBtn = this.add.text(400, 10, '👥 Party', {
+      fontSize: '11px',
+      color: '#38bdf8',
+      backgroundColor: '#000000AA',
+      padding: { x: 6, y: 3 }
+    }).setScrollFactor(0).setDepth(100).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      this.openPartyMenu();
+    });
+
     this.logText = this.add.text(10, 290, 'Move with Arrows / WASD. Walk on tall grass for encounters.', {
       fontSize: '9px',
       color: '#CBD5E1',
@@ -246,5 +256,28 @@ export class OverworldScene extends Phaser.Scene {
     mkBtn(padX, padY + btnSize, '▼', 0, 1);
     mkBtn(padX - btnSize, padY, '◀', -1, 0);
     mkBtn(padX + btnSize, padY, '▶', 1, 0);
+  }
+
+  private openPartyMenu() {
+    const starterSpecies = getSpecies(1);
+    const maxHp = calculateMaxHp(starterSpecies.baseStats.hp, 5);
+    const starterMonster = {
+      id: 'starter-1',
+      speciesId: 1,
+      nickname: 'Emberpup',
+      level: 5,
+      xp: 0,
+      currentHp: maxHp,
+      maxHp,
+      moves: ['tackle', 'ember_nip'],
+      partySlot: 0
+    };
+
+    this.scene.pause('OverworldScene');
+    this.scene.launch('PartyScene', {
+      party: [starterMonster],
+      dex: { 1: true },
+      returnScene: 'OverworldScene'
+    });
   }
 }
