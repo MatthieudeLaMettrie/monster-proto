@@ -3,6 +3,7 @@ import { GalleryScene } from './GalleryScene.js';
 import { OverworldScene } from './OverworldScene.js';
 import { BattleScene } from './BattleScene.js';
 import { PartyScene } from './PartyScene.js';
+import { StarterSelectScene } from './StarterSelectScene.js';
 import { PersistenceManager } from './persistence.js';
 
 class BootScene extends Phaser.Scene {
@@ -16,39 +17,58 @@ class BootScene extends Phaser.Scene {
 
   async create() {
     // Authenticate guest session
-    const session = await PersistenceManager.initSession();
-    this.add.text(240, 50, 'Monster Proto', {
+    await PersistenceManager.initSession();
+
+    this.add.text(240, 45, 'Monster Proto', {
       fontSize: '28px',
       color: '#fff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.add.text(240, 85, '2D Browser Monster Battle Prototype', {
+    this.add.text(240, 75, '2D Browser Monster Battle Prototype', {
       fontSize: '13px',
       color: '#94a3b8'
     }).setOrigin(0.5);
 
-    // Play button -> starts Overworld
-    const playBtn = this.add.rectangle(240, 150, 200, 42, 0x10b981)
+    // Play button -> checks if starter picked
+    const playBtn = this.add.rectangle(240, 135, 220, 38, 0x10b981)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        this.scene.start('OverworldScene');
+        const hasParty = localStorage.getItem('monster_proto_party');
+        if (!hasParty) {
+          this.scene.start('StarterSelectScene');
+        } else {
+          this.scene.start('OverworldScene');
+        }
       });
 
-    this.add.text(240, 150, '▶ Start Adventure (Map)', {
+    this.add.text(240, 135, '▶ Start Adventure (Map)', {
+      fontSize: '14px',
+      color: '#fff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // Pick Starter button
+    const starterBtn = this.add.rectangle(240, 185, 220, 38, 0xf59e0b)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.scene.start('StarterSelectScene');
+      });
+
+    this.add.text(240, 185, '🐾 Pick / Reset Starter', {
       fontSize: '14px',
       color: '#fff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
     // Gallery button
-    const galleryBtn = this.add.rectangle(240, 205, 200, 42, 0x3b82f6)
+    const galleryBtn = this.add.rectangle(240, 235, 220, 38, 0x3b82f6)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         this.scene.start('GalleryScene');
       });
 
-    this.add.text(240, 205, '📜 View 60 Monsters', {
+    this.add.text(240, 235, '📜 View 60 Monsters', {
       fontSize: '14px',
       color: '#fff',
       fontStyle: 'bold'
@@ -81,7 +101,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
-  scene: [BootScene, OverworldScene, BattleScene, PartyScene, GalleryScene]
+  scene: [BootScene, StarterSelectScene, OverworldScene, BattleScene, PartyScene, GalleryScene]
 };
 
 new Phaser.Game(config);

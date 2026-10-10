@@ -106,8 +106,12 @@ export class PartyScene extends Phaser.Scene {
         color: '#38bdf8'
       }).setName('tab-content');
 
-      this.add.text(x - 25, y + 6, `HP: ${mon.currentHp}/${mon.maxHp}`, {
-        fontSize: '10px',
+      const atk = Math.floor((spec.baseStats.atk * 2 * mon.level) / 100) + 5;
+      const def = Math.floor((spec.baseStats.def * 2 * mon.level) / 100) + 5;
+      const spd = Math.floor((spec.baseStats.spd * 2 * mon.level) / 100) + 5;
+
+      this.add.text(x - 25, y + 6, `HP:${mon.currentHp}/${mon.maxHp}  ATK:${atk}  DEF:${def}  SPD:${spd}`, {
+        fontSize: '9px',
         color: '#4ade80'
       }).setName('tab-content');
 

@@ -463,6 +463,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private endBattle(survived: boolean) {
+    // Save party progress to localStorage
+    try {
+      localStorage.setItem('monster_proto_party', JSON.stringify(this.playerParty));
+    } catch {}
+
     this.scene.stop('BattleScene');
     this.scene.resume(this.returnScene);
   }

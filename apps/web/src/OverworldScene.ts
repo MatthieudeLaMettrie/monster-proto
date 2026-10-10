@@ -170,25 +170,12 @@ export class OverworldScene extends Phaser.Scene {
     this.logText.setText(`Wild ${wildSpecies.name} (Lv ${level}, ${wildSpecies.type}) appeared!`);
     this.cameras.main.flash(400, 255, 255, 255);
 
-    // Default starter party for player if not already created
-    const starterSpecies = getSpecies(1); // Emberpup
-    const maxHp = calculateMaxHp(starterSpecies.baseStats.hp, 5);
-    const starterMonster = {
-      id: 'starter-1',
-      speciesId: 1,
-      nickname: 'Emberpup',
-      level: 5,
-      xp: 0,
-      currentHp: maxHp,
-      maxHp,
-      moves: ['tackle', 'ember_nip'],
-      partySlot: 0
-    };
+    const playerParty = this.getPlayerParty();
 
     this.time.delayedCall(450, () => {
       this.scene.pause('OverworldScene');
       this.scene.launch('BattleScene', {
-        playerParty: [starterMonster],
+        playerParty,
         wildSpeciesId: speciesId,
         wildLevel: level,
         returnScene: 'OverworldScene'
@@ -258,10 +245,16 @@ export class OverworldScene extends Phaser.Scene {
     mkBtn(padX + btnSize, padY, '▶', 1, 0);
   }
 
-  private openPartyMenu() {
+  private getPlayerParty(): MonsterInstance[] {
+    const raw = localStorage.getItem('monster_proto_party');
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {}
+    }
     const starterSpecies = getSpecies(1);
     const maxHp = calculateMaxHp(starterSpecies.baseStats.hp, 5);
-    const starterMonster = {
+    const starter: MonsterInstance = {
       id: 'starter-1',
       speciesId: 1,
       nickname: 'Emberpup',
@@ -272,11 +265,18 @@ export class OverworldScene extends Phaser.Scene {
       moves: ['tackle', 'ember_nip'],
       partySlot: 0
     };
+    return [starter];
+  }
+
+  private openPartyMenu() {
+    const party = this.getPlayerParty();
+    const rawDex = localStorage.getItem('monster_proto_dex');
+    const dex = rawDex ? JSON.parse(rawDex) : { 1: true };
 
     this.scene.pause('OverworldScene');
     this.scene.launch('PartyScene', {
-      party: [starterMonster],
-      dex: { 1: true },
+      party,
+      dex,
       returnScene: 'OverworldScene'
     });
   }
