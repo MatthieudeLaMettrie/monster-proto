@@ -33,7 +33,8 @@ export const TYPE_CHART = {
     },
     Dragon: {
         Dragon: 2.0,
-        Fly: 2.0
+        Fly: 1.5,
+        Fight: 0.5
     },
     Fly: {
         Grass: 2.0,
@@ -43,7 +44,8 @@ export const TYPE_CHART = {
     Fight: {
         Psy: 0.5,
         Dark: 2.0,
-        Fly: 0.5
+        Fly: 0.5,
+        Dragon: 1.5
     }
 };
 export function getTypeMultiplier(attackerType, defenderType) {

@@ -35,7 +35,8 @@ export const TYPE_CHART: Record<ElementType, Partial<Record<ElementType, number>
   },
   Dragon: {
     Dragon: 2.0,
-    Fly: 2.0
+    Fly: 1.5,
+    Fight: 0.5
   },
   Fly: {
     Grass: 2.0,
@@ -45,7 +46,8 @@ export const TYPE_CHART: Record<ElementType, Partial<Record<ElementType, number>
   Fight: {
     Psy: 0.5,
     Dark: 2.0,
-    Fly: 0.5
+    Fly: 0.5,
+    Dragon: 1.5
   }
 };
 
