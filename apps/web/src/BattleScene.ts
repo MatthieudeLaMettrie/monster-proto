@@ -16,6 +16,7 @@ import {
 } from '@monster-proto/shared';
 import { Sound } from './SoundManager.js';
 import { PersistenceManager } from './persistence.js';
+import { createTrainerTextures } from './TrainerTexture.js';
 
 export interface BattleInitData {
   playerParty: MonsterInstance[];
@@ -42,6 +43,7 @@ export class BattleScene extends Phaser.Scene {
 
   private playerSprite!: Phaser.GameObjects.Image;
   private enemySprite!: Phaser.GameObjects.Image;
+  private trainerBackSprite?: Phaser.GameObjects.Image;
 
   private playerHpBar!: Phaser.GameObjects.Graphics;
   private enemyHpBar!: Phaser.GameObjects.Graphics;
@@ -183,11 +185,66 @@ export class BattleScene extends Phaser.Scene {
     const playerSpecies = getSpecies(activePlayer.speciesId);
     const enemySpecies = getSpecies(this.wildMonster.speciesId);
 
+    createTrainerTextures(this);
+
     // Sprites
     this.enemySprite = this.add.image(360, 95, `monster-${enemySpecies.id}`).setScale(1.2);
-    this.playerSprite = this.add.image(120, 195, `monster-${playerSpecies.id}`).setScale(1.4);
+    this.playerSprite = this.add.image(120, 195, `monster-${playerSpecies.id}`).setScale(0); // Starts collapsed in capsule
 
-    this.updatePlayerVisuals(true);
+    // Trainer Back-Sprite send-out sequence
+    this.trainerBackSprite = this.add.image(90, 205, 'trainer-back-idle').setScale(1.7).setDepth(15);
+
+    this.time.delayedCall(300, () => {
+      if (this.trainerBackSprite && this.trainerBackSprite.active) {
+        this.trainerBackSprite.setTexture('trainer-back-windup');
+      }
+    });
+
+    this.time.delayedCall(600, () => {
+      if (!this.trainerBackSprite || !this.trainerBackSprite.active) return;
+      this.trainerBackSprite.setTexture('trainer-back-throw');
+
+      const capsule = this.add.circle(105, 190, 5, 0xef4444).setStrokeStyle(1.5, 0xffffff).setDepth(20);
+      Sound.playGrassStep();
+
+      this.tweens.add({
+        targets: capsule,
+        x: 120,
+        y: 195,
+        duration: 250,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
+          capsule.destroy();
+          Sound.playCatchSuccess();
+          this.triggerCapsulePop(120, 195);
+
+          // Summon player monster
+          this.tweens.add({
+            targets: this.playerSprite,
+            scale: 1.4,
+            duration: 250,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+              this.updatePlayerVisuals(false);
+            }
+          });
+
+          // Trainer slides smoothly off to the left
+          this.tweens.add({
+            targets: this.trainerBackSprite,
+            x: -80,
+            alpha: 0,
+            duration: 450,
+            ease: 'Sine.easeIn',
+            onComplete: () => {
+              this.trainerBackSprite?.destroy();
+              this.trainerBackSprite = undefined;
+            }
+          });
+        }
+      });
+    });
+
     this.updateEnemyVisuals(true);
 
     // Enemy HUD (Top-Left)

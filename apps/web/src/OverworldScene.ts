@@ -78,11 +78,11 @@ export class OverworldScene extends Phaser.Scene {
     this.renderChampionNpc();
     this.setupMultiplayer();
 
-    // Create player avatar with 16x20 retro pixel-art
+    // Create player avatar with 20x28 retro pixel-art
     const px = this.playerTile.x * this.tileSize + 8;
     const py = this.playerTile.y * this.tileSize + 8;
     this.playerSprite = this.add.image(px, py, 'trainer-down-0')
-      .setOrigin(0.5, 0.7)
+      .setOrigin(0.5, 0.82)
       .setScale(1.0)
       .setDepth(10);
 
