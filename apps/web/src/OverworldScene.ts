@@ -132,10 +132,9 @@ export class OverworldScene extends Phaser.Scene {
   private onStepComplete(x: number, y: number) {
     const idx = y * this.mapData.width + x;
 
-    // Check Heal tile
+    // Check Heal tile (Revitalize Spot)
     if (this.mapData.layers.ground[idx] === 6) {
-      this.logText.setText('Heal Spot: Your team has been fully restored!');
-      this.cameras.main.flash(200, 50, 205, 50);
+      this.revitalizeParty();
       return;
     }
 
@@ -274,7 +273,25 @@ export class OverworldScene extends Phaser.Scene {
     return [starter];
   }
 
-  private openPartyMenu() {
+  public revitalizeParty() {
+    const party = this.getPlayerParty();
+    party.forEach((mon) => {
+      mon.currentHp = mon.maxHp;
+    });
+    localStorage.setItem('monster_proto_party', JSON.stringify(party));
+    this.logText.setText('💖 Revitalized! All team members restored to full HP!');
+    this.cameras.main.flash(300, 50, 205, 50);
+
+    const toast = document.getElementById('save-toast');
+    if (toast) {
+      toast.innerText = '💖 Team Revitalized to Full HP!';
+      toast.style.background = '#0284c7';
+      toast.style.opacity = '1';
+      setTimeout(() => (toast.style.opacity = '0'), 1800);
+    }
+  }
+
+  public openPartyMenu() {
     const party = this.getPlayerParty();
     const rawDex = localStorage.getItem('monster_proto_dex');
     const dex = rawDex ? JSON.parse(rawDex) : { 1: true };

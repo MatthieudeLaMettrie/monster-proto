@@ -110,4 +110,59 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [BootScene, StarterSelectScene, OverworldScene, BattleScene, PartyScene, GalleryScene]
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+// Wire persistent HTML Top Navigation Bar buttons
+window.addEventListener('DOMContentLoaded', () => {
+  const partyBtn = document.getElementById('btn-party');
+  const healBtn = document.getElementById('btn-heal');
+  const saveBtn = document.getElementById('btn-save');
+
+  partyBtn?.addEventListener('click', () => {
+    const overworld = game.scene.getScene('OverworldScene') as OverworldScene;
+    if (overworld && game.scene.isActive('OverworldScene')) {
+      overworld.openPartyMenu();
+    } else {
+      game.scene.start('PartyScene', { returnScene: 'OverworldScene' });
+    }
+  });
+
+  healBtn?.addEventListener('click', () => {
+    const overworld = game.scene.getScene('OverworldScene') as OverworldScene;
+    if (overworld) {
+      overworld.revitalizeParty();
+    } else {
+      const raw = localStorage.getItem('monster_proto_party');
+      if (raw) {
+        const party = JSON.parse(raw);
+        party.forEach((m: any) => (m.currentHp = m.maxHp));
+        localStorage.setItem('monster_proto_party', JSON.stringify(party));
+      }
+    }
+  });
+
+  saveBtn?.addEventListener('click', async () => {
+    const rawParty = localStorage.getItem('monster_proto_party');
+    const rawDex = localStorage.getItem('monster_proto_dex');
+    const party = rawParty ? JSON.parse(rawParty) : [];
+    const dex = rawDex ? JSON.parse(rawDex) : { 1: true };
+
+    const savePayload = {
+      posX: 5,
+      posY: 5,
+      championBeaten: 0,
+      party,
+      box: [],
+      dex
+    };
+
+    const saved = await PersistenceManager.saveState(savePayload);
+    const toast = document.getElementById('save-toast');
+    if (toast) {
+      toast.innerText = saved ? '💾 Game Saved to Cloud!' : '💾 Game Saved Locally!';
+      toast.style.background = '#10b981';
+      toast.style.opacity = '1';
+      setTimeout(() => (toast.style.opacity = '0'), 2000);
+    }
+  });
+});

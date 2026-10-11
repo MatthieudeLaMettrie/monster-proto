@@ -44,9 +44,17 @@ export class BattleScene extends Phaser.Scene {
   }
 
   init(data: BattleInitData) {
-    this.playerParty = data.playerParty;
-    this.activePlayerIdx = 0;
+    this.playerParty = data.playerParty || [];
     this.returnScene = data.returnScene || 'OverworldScene';
+
+    // Find first conscious monster in party
+    let firstAliveIdx = this.playerParty.findIndex((m) => m.currentHp > 0);
+    if (firstAliveIdx === -1 && this.playerParty.length > 0) {
+      // Emergency revitalization if user forgot to heal
+      this.playerParty[0].currentHp = this.playerParty[0].maxHp;
+      firstAliveIdx = 0;
+    }
+    this.activePlayerIdx = Math.max(0, firstAliveIdx);
 
     const enemySpecies = getSpecies(data.wildSpeciesId);
     const maxHp = calculateMaxHp(enemySpecies.baseStats.hp, data.wildLevel);
