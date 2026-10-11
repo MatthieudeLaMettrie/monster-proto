@@ -17,6 +17,7 @@ export interface BattleInitData {
   wildSpeciesId: number;
   wildLevel: number;
   returnScene: string;
+  returnTile?: { x: number; y: number };
 }
 
 export class BattleScene extends Phaser.Scene {
@@ -24,6 +25,7 @@ export class BattleScene extends Phaser.Scene {
   private activePlayerIdx = 0;
   private wildMonster!: MonsterInstance;
   private returnScene = 'OverworldScene';
+  private returnTile?: { x: number; y: number };
 
   private playerSprite!: Phaser.GameObjects.Image;
   private enemySprite!: Phaser.GameObjects.Image;
@@ -43,9 +45,55 @@ export class BattleScene extends Phaser.Scene {
     super('BattleScene');
   }
 
+  private getFallbackParty(): MonsterInstance[] {
+    const raw = localStorage.getItem('monster_proto_party');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    const starterSpecies = getSpecies(1);
+    const maxHp = calculateMaxHp(starterSpecies.baseStats.hp, 5);
+    return [{
+      id: 'starter-1',
+      speciesId: 1,
+      nickname: 'Emberpup',
+      level: 5,
+      xp: 0,
+      currentHp: maxHp,
+      maxHp,
+      moves: ['tackle', 'ember_nip'],
+      partySlot: 0
+    }];
+  }
+
   init(data: BattleInitData) {
-    this.playerParty = data.playerParty || [];
+    this.isActing = false;
     this.returnScene = data.returnScene || 'OverworldScene';
+    this.returnTile = data.returnTile;
+
+    let party = (data.playerParty && Array.isArray(data.playerParty) && data.playerParty.length > 0)
+      ? data.playerParty
+      : this.getFallbackParty();
+
+    // Sanitize party items
+    this.playerParty = party.map((m, idx) => {
+      const spec = getSpecies(m.speciesId || 1);
+      const lvl = Math.max(1, m.level || 5);
+      const maxHp = m.maxHp || calculateMaxHp(spec.baseStats.hp, lvl);
+      return {
+        id: m.id || `mon-${idx}-${Date.now()}`,
+        speciesId: spec.id,
+        nickname: m.nickname || spec.name,
+        level: lvl,
+        xp: m.xp || 0,
+        currentHp: typeof m.currentHp === 'number' ? m.currentHp : maxHp,
+        maxHp,
+        moves: Array.isArray(m.moves) && m.moves.length > 0 ? m.moves : getDefaultMoves(spec, lvl),
+        partySlot: idx
+      };
+    });
 
     // Find first conscious monster in party
     let firstAliveIdx = this.playerParty.findIndex((m) => m.currentHp > 0);
@@ -56,21 +104,29 @@ export class BattleScene extends Phaser.Scene {
     }
     this.activePlayerIdx = Math.max(0, firstAliveIdx);
 
-    const enemySpecies = getSpecies(data.wildSpeciesId);
-    const maxHp = calculateMaxHp(enemySpecies.baseStats.hp, data.wildLevel);
+    const wildId = data.wildSpeciesId || 19;
+    const wildLvl = Math.max(1, data.wildLevel || 3);
+    const enemySpecies = getSpecies(wildId);
+    const maxHp = calculateMaxHp(enemySpecies.baseStats.hp, wildLvl);
     this.wildMonster = {
       id: 'wild-' + Date.now(),
       speciesId: enemySpecies.id,
       nickname: enemySpecies.name,
-      level: data.wildLevel,
+      level: wildLvl,
       xp: 0,
       currentHp: maxHp,
       maxHp,
-      moves: getDefaultMoves(enemySpecies, data.wildLevel)
+      moves: getDefaultMoves(enemySpecies, wildLvl)
     };
   }
 
   create() {
+    this.isActing = false;
+    this.events.once('shutdown', () => {
+      this.isActing = false;
+      this.tweens.killAll();
+    });
+
     // Background arena
     this.add.rectangle(240, 160, 480, 320, 0x1e293b);
     this.add.ellipse(360, 110, 150, 40, 0x334155);
@@ -426,6 +482,14 @@ export class BattleScene extends Phaser.Scene {
           this.playerParty.push(this.wildMonster);
         }
 
+        // Register in Dex
+        try {
+          const rawDex = localStorage.getItem('monster_proto_dex');
+          const dex = rawDex ? JSON.parse(rawDex) : {};
+          dex[wildSpecies.id] = true;
+          localStorage.setItem('monster_proto_dex', JSON.stringify(dex));
+        } catch {}
+
         this.time.delayedCall(1600, () => this.endBattle(true));
       } else {
         this.dialogueText.setText(`Oh no! ${wildSpecies.name} broke free!`);
@@ -471,11 +535,25 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private endBattle(survived: boolean) {
+    this.isActing = false;
     // Save party progress to localStorage
     try {
       localStorage.setItem('monster_proto_party', JSON.stringify(this.playerParty));
     } catch {}
 
-    this.scene.start(this.returnScene);
+    this.scene.start(this.returnScene, {
+      returnTile: this.returnTile,
+      justExitedBattle: true
+    });
+  }
+
+  public refreshPartyHp() {
+    this.playerParty.forEach((m) => {
+      m.currentHp = m.maxHp;
+    });
+    this.updateHpBars();
+    if (this.dialogueText && this.dialogueText.active) {
+      this.dialogueText.setText('💖 Team Revitalized to Full HP!');
+    }
   }
 }

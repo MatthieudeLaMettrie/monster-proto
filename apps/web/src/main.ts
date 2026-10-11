@@ -40,7 +40,14 @@ class BootScene extends Phaser.Scene {
     const playBtn = this.add.rectangle(240, 135, 220, 38, 0x10b981)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
-        const hasParty = localStorage.getItem('monster_proto_party');
+        const rawParty = localStorage.getItem('monster_proto_party');
+        let hasParty = false;
+        if (rawParty) {
+          try {
+            const parsed = JSON.parse(rawParty);
+            if (Array.isArray(parsed) && parsed.length > 0) hasParty = true;
+          } catch {}
+        }
         if (!hasParty) {
           this.scene.start('StarterSelectScene');
         } else {
@@ -119,25 +126,55 @@ window.addEventListener('DOMContentLoaded', () => {
   const saveBtn = document.getElementById('btn-save');
 
   partyBtn?.addEventListener('click', () => {
+    const rawParty = localStorage.getItem('monster_proto_party');
+    const rawDex = localStorage.getItem('monster_proto_dex');
+    let party: any[] = [];
+    if (rawParty) {
+      try {
+        const parsed = JSON.parse(rawParty);
+        if (Array.isArray(parsed) && parsed.length > 0) party = parsed;
+      } catch {}
+    }
+    const dex = rawDex ? JSON.parse(rawDex) : { 1: true };
+
     const overworld = game.scene.getScene('OverworldScene') as OverworldScene;
     if (overworld && game.scene.isActive('OverworldScene')) {
       overworld.openPartyMenu();
+    } else if (game.scene.isActive('BattleScene')) {
+      game.scene.pause('BattleScene');
+      game.scene.launch('PartyScene', { party, dex, returnScene: 'BattleScene' });
     } else {
-      game.scene.start('PartyScene', { returnScene: 'OverworldScene' });
+      game.scene.start('PartyScene', { party, dex, returnScene: 'OverworldScene' });
     }
   });
 
   healBtn?.addEventListener('click', () => {
-    const overworld = game.scene.getScene('OverworldScene') as OverworldScene;
-    if (overworld) {
-      overworld.revitalizeParty();
-    } else {
-      const raw = localStorage.getItem('monster_proto_party');
-      if (raw) {
+    const raw = localStorage.getItem('monster_proto_party');
+    if (raw) {
+      try {
         const party = JSON.parse(raw);
-        party.forEach((m: any) => (m.currentHp = m.maxHp));
-        localStorage.setItem('monster_proto_party', JSON.stringify(party));
-      }
+        if (Array.isArray(party)) {
+          party.forEach((m: any) => (m.currentHp = m.maxHp));
+          localStorage.setItem('monster_proto_party', JSON.stringify(party));
+        }
+      } catch {}
+    }
+
+    const overworld = game.scene.getScene('OverworldScene') as OverworldScene;
+    const battle = game.scene.getScene('BattleScene') as any;
+
+    if (overworld && game.scene.isActive('OverworldScene')) {
+      overworld.revitalizeParty();
+    } else if (battle && game.scene.isActive('BattleScene')) {
+      battle.refreshPartyHp?.();
+    }
+
+    const toast = document.getElementById('save-toast');
+    if (toast) {
+      toast.innerText = '💖 Team Revitalized to Full HP!';
+      toast.style.background = '#0284c7';
+      toast.style.opacity = '1';
+      setTimeout(() => (toast.style.opacity = '0'), 1800);
     }
   });
 

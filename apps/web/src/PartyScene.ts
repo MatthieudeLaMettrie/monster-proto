@@ -52,7 +52,11 @@ export class PartyScene extends Phaser.Scene {
       color: '#ef4444'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       this.scene.stop('PartyScene');
-      this.scene.resume(this.returnScene);
+      if (this.scene.isPaused(this.returnScene)) {
+        this.scene.resume(this.returnScene);
+      } else {
+        this.scene.start(this.returnScene);
+      }
     });
 
     this.renderContent();

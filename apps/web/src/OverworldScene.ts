@@ -14,6 +14,7 @@ export class OverworldScene extends Phaser.Scene {
     D: Phaser.Input.Keyboard.Key;
   };
   private isMoving = false;
+  private encounterCooldownSteps = 0;
   private bannerText!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
 
@@ -21,8 +22,14 @@ export class OverworldScene extends Phaser.Scene {
     super('OverworldScene');
   }
 
-  preload() {
-    this.load.json('worldMap', '/map.json');
+  init(data?: { returnTile?: { x: number; y: number }; justExitedBattle?: boolean }) {
+    if (data?.returnTile) {
+      this.playerTile = { ...data.returnTile };
+    }
+    this.isMoving = false;
+    if (data?.justExitedBattle) {
+      this.encounterCooldownSteps = 3; // Grace period after exiting battle
+    }
   }
 
   create() {
@@ -99,6 +106,8 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private attemptMove(dx: number, dy: number) {
+    if (this.isMoving) return;
+
     const targetX = this.playerTile.x + dx;
     const targetY = this.playerTile.y + dy;
 
@@ -155,7 +164,9 @@ export class OverworldScene extends Phaser.Scene {
 
       // Tall grass encounter roll
       if (this.mapData.layers.tallGrass[idx] === 3) {
-        if (Math.random() < 0.12) {
+        if (this.encounterCooldownSteps > 0) {
+          this.encounterCooldownSteps--;
+        } else if (Math.random() < 0.14) {
           this.triggerEncounter(zoneDef);
         }
       }
@@ -183,7 +194,8 @@ export class OverworldScene extends Phaser.Scene {
         playerParty,
         wildSpeciesId: speciesId,
         wildLevel: level,
-        returnScene: 'OverworldScene'
+        returnScene: 'OverworldScene',
+        returnTile: { ...this.playerTile }
       });
     });
   }
@@ -254,7 +266,10 @@ export class OverworldScene extends Phaser.Scene {
     const raw = localStorage.getItem('monster_proto_party');
     if (raw) {
       try {
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       } catch {}
     }
     const starterSpecies = getSpecies(1);
@@ -270,6 +285,9 @@ export class OverworldScene extends Phaser.Scene {
       moves: ['tackle', 'ember_nip'],
       partySlot: 0
     };
+    try {
+      localStorage.setItem('monster_proto_party', JSON.stringify([starter]));
+    } catch {}
     return [starter];
   }
 
@@ -278,9 +296,15 @@ export class OverworldScene extends Phaser.Scene {
     party.forEach((mon) => {
       mon.currentHp = mon.maxHp;
     });
-    localStorage.setItem('monster_proto_party', JSON.stringify(party));
-    this.logText.setText('💖 Revitalized! All team members restored to full HP!');
-    this.cameras.main.flash(300, 50, 205, 50);
+    try {
+      localStorage.setItem('monster_proto_party', JSON.stringify(party));
+    } catch {}
+    if (this.logText && this.logText.active) {
+      this.logText.setText('💖 Revitalized! All team members restored to full HP!');
+    }
+    if (this.cameras?.main) {
+      this.cameras.main.flash(300, 50, 205, 50);
+    }
 
     const toast = document.getElementById('save-toast');
     if (toast) {
