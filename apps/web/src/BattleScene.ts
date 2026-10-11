@@ -222,9 +222,9 @@ export class BattleScene extends Phaser.Scene {
     const playerSpecies = getSpecies(activePlayer.speciesId);
     const enemySpecies = getSpecies(this.wildMonster.speciesId);
 
-    const playerMove = MOVES[playerMoveId];
-    const enemyMoveId = Phaser.Utils.Array.GetRandom(this.wildMonster.moves);
-    const enemyMove = MOVES[enemyMoveId];
+    const playerMove = MOVES[playerMoveId] || MOVES['tackle'];
+    const enemyMoveId = Phaser.Utils.Array.GetRandom(this.wildMonster.moves) || 'tackle';
+    const enemyMove = MOVES[enemyMoveId] || MOVES['tackle'];
 
     // Speed calculation
     const playerSpd = calculateStat(playerSpecies.baseStats.spd, activePlayer.level);

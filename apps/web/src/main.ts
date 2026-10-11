@@ -6,6 +6,8 @@ import { PartyScene } from './PartyScene.js';
 import { StarterSelectScene } from './StarterSelectScene.js';
 import { PersistenceManager } from './persistence.js';
 
+import { SPECIES } from '@monster-proto/shared';
+
 class BootScene extends Phaser.Scene {
   constructor() {
     super('BootScene');
@@ -13,6 +15,10 @@ class BootScene extends Phaser.Scene {
 
   preload() {
     this.load.json('worldMap', '/map.json');
+    // Preload all 60 monster SVGs upfront so battles and party scene never crash
+    for (const s of SPECIES) {
+      this.load.svg(`monster-${s.id}`, `/sprites/${s.id}.svg`, { width: 64, height: 64 });
+    }
   }
 
   async create() {

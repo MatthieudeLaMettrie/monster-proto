@@ -50,30 +50,33 @@ export class OverworldScene extends Phaser.Scene {
       };
     }
 
-    // UI overlays fixed on screen
-    this.bannerText = this.add.text(10, 10, 'Pallet Plaza (Safe Town)', {
-      fontSize: '11px',
+    // UI Overlays: Location Banner (Top-Left)
+    this.bannerText = this.add.text(12, 12, 'Pallet Plaza (Safe Town)', {
+      fontSize: '12px',
       color: '#FFFFFF',
-      backgroundColor: '#000000AA',
-      padding: { x: 6, y: 3 }
-    }).setScrollFactor(0).setDepth(100);
+      backgroundColor: '#0f172aEE',
+      padding: { x: 8, y: 5 }
+    }).setScrollFactor(0).setDepth(200);
 
-    // Party & Dex button (Top-Right)
-    const partyBtn = this.add.text(400, 10, '👥 Party', {
-      fontSize: '11px',
-      color: '#38bdf8',
-      backgroundColor: '#000000AA',
-      padding: { x: 6, y: 3 }
-    }).setScrollFactor(0).setDepth(100).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-      this.openPartyMenu();
-    });
+    // Big Prominent Party & Dex Button (Top-Right)
+    const partyBtnBg = this.add.rectangle(420, 20, 96, 30, 0x0284c7)
+      .setScrollFactor(0)
+      .setDepth(200)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.openPartyMenu());
 
-    this.logText = this.add.text(10, 290, 'Move with Arrows / WASD. Walk on tall grass for encounters.', {
-      fontSize: '9px',
+    this.add.text(420, 20, '👥 PARTY / DEX', {
+      fontSize: '10px',
+      color: '#FFFFFF',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.logText = this.add.text(12, 296, 'Move with Arrows / WASD. Walk on tall grass for encounters.', {
+      fontSize: '10px',
       color: '#CBD5E1',
-      backgroundColor: '#000000AA',
-      padding: { x: 5, y: 3 }
-    }).setScrollFactor(0).setDepth(100);
+      backgroundColor: '#0f172aEE',
+      padding: { x: 8, y: 4 }
+    }).setScrollFactor(0).setDepth(200);
 
     // On-screen touch/virtual controls for mobile friendly navigation
     this.createVirtualDpad();
@@ -163,6 +166,8 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private triggerEncounter(zone: EncounterZone) {
+    this.isMoving = true; // Block any further movement while transitioning to battle
+
     const level = Phaser.Math.Between(zone.minLevel, zone.maxLevel);
     const speciesId = Phaser.Utils.Array.GetRandom(zone.speciesIds);
     const wildSpecies = getSpecies(speciesId);
@@ -173,6 +178,7 @@ export class OverworldScene extends Phaser.Scene {
     const playerParty = this.getPlayerParty();
 
     this.time.delayedCall(450, () => {
+      this.isMoving = false;
       this.scene.pause('OverworldScene');
       this.scene.launch('BattleScene', {
         playerParty,
