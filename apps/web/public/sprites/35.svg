@@ -1,26 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <radialGradient id="grad" cx="40%" cy="35%" r="65%">
+    <radialGradient id="grad" cx="35%" cy="30%" r="70%">
       <stop offset="0%" stop-color="#7A6F9B" />
-      <stop offset="100%" stop-color="#4A4458" />
+      <stop offset="60%" stop-color="#4A4458" />
+      <stop offset="100%" stop-color="#1F1B24" />
     </radialGradient>
   </defs>
-  <!-- Shadow -->
-  <ellipse cx="32" cy="58" rx="18" ry="4" fill="#000" opacity="0.2" />
+  <!-- Shadow Disc -->
+  <ellipse cx="32" cy="58" rx="19" ry="4.5" fill="#000" opacity="0.25" />
   
   <!-- Motif background -->
-  <path d="M 28 8 A 6 6 0 0 0 36 16 A 4.5 4.5 0 0 1 28 8 Z" fill="#7A6F9B" transform="scale(1.2)" />
+  <path d="M 27 6 A 7 7 0 0 0 37 16 A 5.5 5.5 0 0 1 27 6 Z" fill="#7A6F9B" transform="scale(1.2)" />
   <!-- Body shape -->
   
+        <!-- Ears -->
+        <polygon points="21,18 25,8 30,17" fill="#1F1B24" stroke="#111" stroke-width="1.5" />
+        <polygon points="34,17 39,8 43,18" fill="#1F1B24" stroke="#111" stroke-width="1.5" />
+        <!-- Body -->
         <ellipse cx="32" cy="36" rx="20.900000000000002" ry="16.15" fill="url(#grad)" stroke="#111" stroke-width="2.5" />
-        <circle cx="16" cy="47.3" r="4" fill="#4A4458" stroke="#111" stroke-width="2" />
-        <circle cx="48" cy="47.3" r="4" fill="#4A4458" stroke="#111" stroke-width="2" />
+        <ellipse cx="32" cy="38" rx="11.4" ry="8.55" fill="#7A6F9B" opacity="0.6" />
+        <!-- Paws -->
+        <ellipse cx="16" cy="47.3" rx="4.5" ry="3.5" fill="#4A4458" stroke="#111" stroke-width="1.8" />
+        <ellipse cx="48" cy="47.3" rx="4.5" ry="3.5" fill="#4A4458" stroke="#111" stroke-width="1.8" />
       
-  <!-- Eyes -->
+  <!-- Expressive Face & Eyes -->
   
-    <circle cx="26" cy="32" r="3" fill="#F43F5E" stroke="#111" stroke-width="1.2" />
-    <circle cx="26.8" cy="32" r="1.2" fill="#111" />
-    <circle cx="38" cy="32" r="3" fill="#F43F5E" stroke="#111" stroke-width="1.2" />
-    <circle cx="38.8" cy="32" r="1.2" fill="#111" />
+    <!-- Left Eye -->
+    <ellipse cx="25.5" cy="32" rx="3.2" ry="3.5200000000000005" fill="#F43F5E" stroke="#111" stroke-width="1.4" />
+    <circle cx="26.3" cy="32" r="1.4" fill="#111" />
+    <circle cx="24.8" cy="30.8" r="1" fill="#FFF" />
+
+    <!-- Right Eye -->
+    <ellipse cx="38.5" cy="32" rx="3.2" ry="3.5200000000000005" fill="#F43F5E" stroke="#111" stroke-width="1.4" />
+    <circle cx="39.3" cy="32" r="1.4" fill="#111" />
+    <circle cx="37.8" cy="30.8" r="1" fill="#FFF" />
+
+    <!-- Mouth -->
+    <path d="M 28 38 Q 32 40 36 37" stroke="#111" stroke-width="1.4" fill="none" stroke-linecap="round" />
   
 </svg>

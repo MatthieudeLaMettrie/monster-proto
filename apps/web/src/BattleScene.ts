@@ -58,6 +58,13 @@ export class BattleScene extends Phaser.Scene {
 
   private isActing = false;
 
+  private playerBreathingTween?: Phaser.Tweens.Tween;
+  private enemyBreathingTween?: Phaser.Tweens.Tween;
+  private playerAura?: Phaser.GameObjects.Arc;
+  private enemyAura?: Phaser.GameObjects.Arc;
+  private playerAuraTween?: Phaser.Tweens.Tween;
+  private enemyAuraTween?: Phaser.Tweens.Tween;
+
   constructor() {
     super('BattleScene');
   }
@@ -179,6 +186,9 @@ export class BattleScene extends Phaser.Scene {
     // Sprites
     this.enemySprite = this.add.image(360, 95, `monster-${enemySpecies.id}`).setScale(1.2);
     this.playerSprite = this.add.image(120, 195, `monster-${playerSpecies.id}`).setScale(1.4);
+
+    this.updatePlayerVisuals(true);
+    this.updateEnemyVisuals(true);
 
     // Enemy HUD (Top-Left)
     this.add.rectangle(130, 45, 200, 42, 0x0f172a, 0.85).setStrokeStyle(1, 0x475569);
@@ -509,6 +519,7 @@ export class BattleScene extends Phaser.Scene {
           scale: 1.4,
           duration: 250,
           onComplete: () => {
+            this.updatePlayerVisuals(true);
             if (forced) {
               this.isActing = false;
               this.menuContainer.setVisible(true);
@@ -700,6 +711,18 @@ export class BattleScene extends Phaser.Scene {
     if (this.wildMonster.currentHp <= 0) {
       // Enemy fainted
       Sound.playFaint();
+      if (this.enemyBreathingTween) this.enemyBreathingTween.stop();
+      if (this.enemyAura) {
+        this.tweens.add({
+          targets: this.enemyAura,
+          alpha: 0,
+          duration: 250,
+          onComplete: () => {
+            this.enemyAura?.destroy();
+            this.enemyAura = undefined;
+          }
+        });
+      }
       const wildSpecies = getSpecies(this.wildMonster.speciesId);
       const xpReward = calculateXpReward(wildSpecies.baseXp, this.wildMonster.level);
       this.dialogueText.setText(`${this.wildMonster.nickname} fainted! Won ${xpReward} XP!`);
@@ -730,6 +753,18 @@ export class BattleScene extends Phaser.Scene {
       }
     } else if (activePlayer.currentHp <= 0) {
       Sound.playFaint();
+      if (this.playerBreathingTween) this.playerBreathingTween.stop();
+      if (this.playerAura) {
+        this.tweens.add({
+          targets: this.playerAura,
+          alpha: 0,
+          duration: 250,
+          onComplete: () => {
+            this.playerAura?.destroy();
+            this.playerAura = undefined;
+          }
+        });
+      }
       this.dialogueText.setText(`${activePlayer.nickname} fainted!`);
       this.tweens.add({
         targets: this.playerSprite,
@@ -778,6 +813,7 @@ export class BattleScene extends Phaser.Scene {
         this.enemySprite.y = 95;
         this.enemyNameText.setText(`${this.wildMonster.nickname} Lv.${this.wildMonster.level}`);
         this.updateHpBars();
+        this.updateEnemyVisuals(true);
 
         this.time.delayedCall(1400, () => {
           this.isActing = false;
@@ -820,6 +856,7 @@ export class BattleScene extends Phaser.Scene {
           playerMon.nickname = evoSpecies.name;
           playerMon.moves = getDefaultMoves(evoSpecies, playerMon.level);
           this.playerSprite.setTexture(`monster-${evoSpecies.id}`);
+          this.updatePlayerVisuals(true);
           this.dialogueText.setText(`Congratulations! Evolved into ${evoSpecies.name}!`);
           this.time.delayedCall(2000, next);
         }
@@ -912,4 +949,134 @@ export class BattleScene extends Phaser.Scene {
       this.dialogueText.setText('💖 Team Revitalized to Full HP!');
     }
   }
+
+  private updatePlayerVisuals(burst = false) {
+    const activePlayer = this.playerParty[this.activePlayerIdx];
+    const playerSpecies = getSpecies(activePlayer.speciesId);
+
+    // Stop existing breathing tween and reset base scale
+    if (this.playerBreathingTween) {
+      this.playerBreathingTween.stop();
+    }
+    this.playerSprite.setScale(1.4);
+
+    // Start idle organic breathing tween
+    this.playerBreathingTween = this.tweens.add({
+      targets: this.playerSprite,
+      scaleY: 1.4 * 1.05,
+      scaleX: 1.4 * 0.97,
+      duration: 850,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    // Clean up previous aura
+    if (this.playerAuraTween) {
+      this.playerAuraTween.stop();
+    }
+    if (this.playerAura) {
+      this.playerAura.destroy();
+      this.playerAura = undefined;
+    }
+
+    // Stage 3 monsters get glowing radiant elemental aura
+    if (playerSpecies.stage === 3) {
+      const col = TYPE_AURA_COLORS[playerSpecies.type] || 0xf59e0b;
+      this.playerAura = this.add.circle(120, 195, 48, col, 0.3)
+        .setStrokeStyle(3, col, 0.8)
+        .setDepth(this.playerSprite.depth - 1);
+
+      this.playerAuraTween = this.tweens.add({
+        targets: this.playerAura,
+        scale: 1.25,
+        alpha: 0.12,
+        duration: 800,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    }
+
+    // Capsule pop summon effect
+    if (burst) {
+      this.triggerCapsulePop(120, 195);
+    }
+  }
+
+  private updateEnemyVisuals(burst = false) {
+    const enemySpecies = getSpecies(this.wildMonster.speciesId);
+
+    // Stop existing breathing tween and reset base scale
+    if (this.enemyBreathingTween) {
+      this.enemyBreathingTween.stop();
+    }
+    this.enemySprite.setScale(1.2);
+
+    // Start idle organic breathing tween
+    this.enemyBreathingTween = this.tweens.add({
+      targets: this.enemySprite,
+      scaleY: 1.2 * 1.05,
+      scaleX: 1.2 * 0.97,
+      duration: 920,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    // Clean up previous aura
+    if (this.enemyAuraTween) {
+      this.enemyAuraTween.stop();
+    }
+    if (this.enemyAura) {
+      this.enemyAura.destroy();
+      this.enemyAura = undefined;
+    }
+
+    // Stage 3 monsters or Champion trainer monsters get glowing radiant aura
+    if (enemySpecies.stage === 3 || this.isTrainerBattle) {
+      const col = TYPE_AURA_COLORS[enemySpecies.type] || 0xf59e0b;
+      this.enemyAura = this.add.circle(360, 95, 42, col, 0.3)
+        .setStrokeStyle(3, col, 0.8)
+        .setDepth(this.enemySprite.depth - 1);
+
+      this.enemyAuraTween = this.tweens.add({
+        targets: this.enemyAura,
+        scale: 1.28,
+        alpha: 0.12,
+        duration: 850,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    }
+
+    // Capsule pop summon effect
+    if (burst) {
+      this.triggerCapsulePop(360, 95);
+    }
+  }
+
+  private triggerCapsulePop(x: number, y: number) {
+    const flash = this.add.circle(x, y, 12, 0xffffff, 0.9).setDepth(30);
+    this.tweens.add({
+      targets: flash,
+      scale: 3.5,
+      alpha: 0,
+      duration: 320,
+      ease: 'Quad.easeOut',
+      onComplete: () => flash.destroy()
+    });
+  }
 }
+
+const TYPE_AURA_COLORS: Record<string, number> = {
+  Fire: 0xf97316,
+  Water: 0x06b6d4,
+  Grass: 0x22c55e,
+  Psy: 0xa855f7,
+  Dark: 0x64748b,
+  Dragon: 0x8b5cf6,
+  Fly: 0x38bdf8,
+  Fight: 0xf59e0b
+};
