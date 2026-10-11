@@ -476,7 +476,6 @@ export class BattleScene extends Phaser.Scene {
       localStorage.setItem('monster_proto_party', JSON.stringify(this.playerParty));
     } catch {}
 
-    this.scene.stop('BattleScene');
-    this.scene.resume(this.returnScene);
+    this.scene.start(this.returnScene);
   }
 }

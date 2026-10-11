@@ -165,21 +165,21 @@ export class OverworldScene extends Phaser.Scene {
   }
 
   private triggerEncounter(zone: EncounterZone) {
-    this.isMoving = true; // Block any further movement while transitioning to battle
+    if (this.isMoving) return;
+    this.isMoving = true;
 
     const level = Phaser.Math.Between(zone.minLevel, zone.maxLevel);
     const speciesId = Phaser.Utils.Array.GetRandom(zone.speciesIds);
     const wildSpecies = getSpecies(speciesId);
 
     this.logText.setText(`Wild ${wildSpecies.name} (Lv ${level}, ${wildSpecies.type}) appeared!`);
-    this.cameras.main.flash(400, 255, 255, 255);
+    this.cameras.main.flash(350, 255, 255, 255);
 
     const playerParty = this.getPlayerParty();
 
-    this.time.delayedCall(450, () => {
+    this.time.delayedCall(400, () => {
       this.isMoving = false;
-      this.scene.pause('OverworldScene');
-      this.scene.launch('BattleScene', {
+      this.scene.start('BattleScene', {
         playerParty,
         wildSpeciesId: speciesId,
         wildLevel: level,
