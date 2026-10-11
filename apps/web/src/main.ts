@@ -117,13 +117,32 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [BootScene, StarterSelectScene, OverworldScene, BattleScene, PartyScene, GalleryScene]
 };
 
+import { Sound } from './SoundManager.js';
+
 const game = new Phaser.Game(config);
 
 // Wire persistent HTML Top Navigation Bar buttons
 window.addEventListener('DOMContentLoaded', () => {
+  const soundBtn = document.getElementById('btn-sound');
   const partyBtn = document.getElementById('btn-party');
   const healBtn = document.getElementById('btn-heal');
   const saveBtn = document.getElementById('btn-save');
+
+  if (soundBtn) {
+    soundBtn.innerText = Sound.isMuted() ? '🔇 Muted' : '🔊 Audio';
+    soundBtn.addEventListener('click', () => {
+      const isMuted = Sound.toggleMute();
+      soundBtn.innerText = isMuted ? '🔇 Muted' : '🔊 Audio';
+      soundBtn.style.background = isMuted ? '#64748b' : '#0284c7';
+      const toast = document.getElementById('save-toast');
+      if (toast) {
+        toast.innerText = isMuted ? '🔇 Audio Muted' : '🔊 8-Bit Audio Enabled';
+        toast.style.background = isMuted ? '#64748b' : '#0284c7';
+        toast.style.opacity = '1';
+        setTimeout(() => (toast.style.opacity = '0'), 1500);
+      }
+    });
+  }
 
   partyBtn?.addEventListener('click', () => {
     const rawParty = localStorage.getItem('monster_proto_party');

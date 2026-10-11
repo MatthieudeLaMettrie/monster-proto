@@ -1,5 +1,26 @@
 import Phaser from 'phaser';
-import { MAP_ZONES, EncounterZone, getSpecies, SPECIES } from '@monster-proto/shared';
+import {
+  MAP_ZONES,
+  EncounterZone,
+  getSpecies,
+  MonsterInstance,
+  calculateMaxHp,
+  getDefaultMoves,
+  ITEMS,
+  DEFAULT_INVENTORY,
+  InventoryBag,
+  PlayerPresence
+} from '@monster-proto/shared';
+import { Sound } from './SoundManager.js';
+import { MultiplayerManager } from './MultiplayerManager.js';
+
+interface ItemPickup {
+  id: string;
+  x: number;
+  y: number;
+  itemId: string;
+  sprite?: Phaser.GameObjects.Arc;
+}
 
 export class OverworldScene extends Phaser.Scene {
   private mapData: any;
@@ -18,6 +39,17 @@ export class OverworldScene extends Phaser.Scene {
   private bannerText!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
 
+  private itemPickups: ItemPickup[] = [
+    { id: 'item-route1', x: 16, y: 4, itemId: 'potion' },
+    { id: 'item-lake', x: 6, y: 18, itemId: 'super_potion' },
+    { id: 'item-crags', x: 31, y: 5, itemId: 'ultra_capsule' },
+    { id: 'item-grove', x: 21, y: 20, itemId: 'revive' },
+    { id: 'item-dojo', x: 32, y: 24, itemId: 'super_potion' }
+  ];
+
+  private championPromptContainer?: Phaser.GameObjects.Container;
+  private otherPlayerSprites: Map<string, { rect: Phaser.GameObjects.Rectangle; nameTag: Phaser.GameObjects.Text }> = new Map();
+
   constructor() {
     super('OverworldScene');
   }
@@ -35,13 +67,16 @@ export class OverworldScene extends Phaser.Scene {
   create() {
     this.mapData = this.cache.json.get('worldMap');
     this.renderTiles();
+    this.renderItemPickups();
+    this.renderChampionNpc();
+    this.setupMultiplayer();
 
-    // Create player avatar (crisp 14x14 box with direction indicator)
+    // Create player avatar
     const px = this.playerTile.x * this.tileSize + 8;
     const py = this.playerTile.y * this.tileSize + 8;
     this.playerSprite = this.add.rectangle(px, py, 12, 12, 0xe11d48).setDepth(10);
 
-    // Camera setup (zoom 2.5x to focus on character, bounds clamped)
+    // Camera setup
     this.cameras.main.setBounds(0, 0, this.mapData.width * this.tileSize, this.mapData.height * this.tileSize);
     this.cameras.main.startFollow(this.playerSprite, true, 0.1, 0.1);
     this.cameras.main.setZoom(2.2);
@@ -65,8 +100,8 @@ export class OverworldScene extends Phaser.Scene {
       padding: { x: 8, y: 5 }
     }).setScrollFactor(0).setDepth(200);
 
-    // Big Prominent Party & Dex Button (Top-Right)
-    const partyBtnBg = this.add.rectangle(420, 20, 96, 30, 0x0284c7)
+    // Big Prominent Party & DEX Button (Top-Right)
+    this.add.rectangle(420, 20, 96, 30, 0x0284c7)
       .setScrollFactor(0)
       .setDepth(200)
       .setInteractive({ useHandCursor: true })
@@ -85,7 +120,6 @@ export class OverworldScene extends Phaser.Scene {
       padding: { x: 8, y: 4 }
     }).setScrollFactor(0).setDepth(200);
 
-    // On-screen touch/virtual controls for mobile friendly navigation
     this.createVirtualDpad();
   }
 
@@ -108,6 +142,12 @@ export class OverworldScene extends Phaser.Scene {
   private attemptMove(dx: number, dy: number) {
     if (this.isMoving) return;
 
+    // Dismiss champion prompt if moving away
+    if (this.championPromptContainer) {
+      this.championPromptContainer.destroy();
+      this.championPromptContainer = undefined;
+    }
+
     const targetX = this.playerTile.x + dx;
     const targetY = this.playerTile.y + dy;
 
@@ -119,11 +159,12 @@ export class OverworldScene extends Phaser.Scene {
     // Collision check
     const idx = targetY * this.mapData.width + targetX;
     if (this.mapData.layers.collision[idx] !== 0) {
-      return; // blocked
+      return;
     }
 
     this.isMoving = true;
     this.playerTile = { x: targetX, y: targetY };
+    MultiplayerManager.getInstance().sendMove(targetX, targetY);
 
     this.tweens.add({
       targets: this.playerSprite,
@@ -141,15 +182,18 @@ export class OverworldScene extends Phaser.Scene {
   private onStepComplete(x: number, y: number) {
     const idx = y * this.mapData.width + x;
 
+    // Check item pickup
+    this.checkItemPickup(x, y);
+
     // Check Heal tile (Revitalize Spot)
     if (this.mapData.layers.ground[idx] === 6) {
       this.revitalizeParty();
       return;
     }
 
-    // Check Champion Spot
+    // Check Champion Spot at Dojo
     if (x === this.mapData.championSpot.x && y === this.mapData.championSpot.y) {
-      this.logText.setText('Champion NPC: "Are you ready to face the Master?"');
+      this.showChampionPrompt();
       return;
     }
 
@@ -164,6 +208,7 @@ export class OverworldScene extends Phaser.Scene {
 
       // Tall grass encounter roll
       if (this.mapData.layers.tallGrass[idx] === 3) {
+        Sound.playGrassStep();
         if (this.encounterCooldownSteps > 0) {
           this.encounterCooldownSteps--;
         } else if (Math.random() < 0.14) {
@@ -175,6 +220,179 @@ export class OverworldScene extends Phaser.Scene {
     }
   }
 
+  private renderChampionNpc() {
+    const cx = this.mapData.championSpot.x * this.tileSize + 8;
+    const cy = this.mapData.championSpot.y * this.tileSize + 8;
+
+    // Golden Master NPC avatar
+    this.add.circle(cx, cy, 7, 0xf59e0b).setStrokeStyle(2, 0xd97706).setDepth(9);
+    this.add.text(cx, cy - 14, '👑 Master', {
+      fontSize: '8px',
+      color: '#fbbf24',
+      backgroundColor: '#0f172aEE',
+      padding: { x: 3, y: 1 }
+    }).setOrigin(0.5).setDepth(10);
+  }
+
+  private showChampionPrompt() {
+    if (this.championPromptContainer) return;
+
+    this.championPromptContainer = this.add.container(240, 160).setScrollFactor(0).setDepth(300);
+
+    const bg = this.add.rectangle(0, 0, 320, 140, 0x0f172a, 0.95).setStrokeStyle(2, 0xf59e0b);
+    const title = this.add.text(0, -45, '👑 DOJO CHAMPION AARON', {
+      fontSize: '13px',
+      color: '#f59e0b',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const desc = this.add.text(0, -15, '"I am Master Aaron! Prove your worth\nin an ultimate 3v3 Champion Battle!"', {
+      fontSize: '10px',
+      color: '#f8fafc',
+      align: 'center'
+    }).setOrigin(0.5);
+
+    const challengeBtn = this.add.rectangle(-65, 35, 120, 30, 0xd97706)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.startChampionBattle());
+
+    const challengeTxt = this.add.text(-65, 35, '⚔️ Challenge (3v3)', {
+      fontSize: '10px',
+      color: '#fff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const leaveBtn = this.add.rectangle(75, 35, 90, 30, 0x475569)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.championPromptContainer?.destroy();
+        this.championPromptContainer = undefined;
+      });
+
+    const leaveTxt = this.add.text(75, 35, 'Leave', {
+      fontSize: '10px',
+      color: '#fff'
+    }).setOrigin(0.5);
+
+    this.championPromptContainer.add([bg, title, desc, challengeBtn, challengeTxt, leaveBtn, leaveTxt]);
+  }
+
+  private startChampionBattle() {
+    this.championPromptContainer?.destroy();
+    this.championPromptContainer = undefined;
+
+    Sound.playWiggle();
+    this.cameras.main.flash(400, 245, 158, 11);
+
+    const playerParty = this.getPlayerParty();
+
+    // 3v3 Stage-3 Champion Team
+    const championTeam: MonsterInstance[] = [
+      {
+        id: 'champ-1',
+        speciesId: 60,
+        nickname: 'Ursumaul',
+        level: 16,
+        xp: 0,
+        currentHp: calculateMaxHp(getSpecies(60).baseStats.hp, 16),
+        maxHp: calculateMaxHp(getSpecies(60).baseStats.hp, 16),
+        moves: getDefaultMoves(getSpecies(60), 16),
+        partySlot: 0
+      },
+      {
+        id: 'champ-2',
+        speciesId: 3,
+        nickname: 'Infernmastiff',
+        level: 16,
+        xp: 0,
+        currentHp: calculateMaxHp(getSpecies(3).baseStats.hp, 16),
+        maxHp: calculateMaxHp(getSpecies(3).baseStats.hp, 16),
+        moves: getDefaultMoves(getSpecies(3), 16),
+        partySlot: 1
+      },
+      {
+        id: 'champ-3',
+        speciesId: 9,
+        nickname: 'Volcarapace',
+        level: 17,
+        xp: 0,
+        currentHp: calculateMaxHp(getSpecies(9).baseStats.hp, 17),
+        maxHp: calculateMaxHp(getSpecies(9).baseStats.hp, 17),
+        moves: getDefaultMoves(getSpecies(9), 17),
+        partySlot: 2
+      }
+    ];
+
+    this.time.delayedCall(450, () => {
+      this.scene.start('BattleScene', {
+        playerParty,
+        isTrainerBattle: true,
+        trainerName: 'Master Aaron',
+        trainerParty: championTeam,
+        returnScene: 'OverworldScene',
+        returnTile: { ...this.playerTile }
+      });
+    });
+  }
+
+  private renderItemPickups() {
+    const raw = localStorage.getItem('monster_proto_collected_items');
+    const collected: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+
+    this.itemPickups.forEach((pickup) => {
+      if (collected[pickup.id]) return;
+
+      const px = pickup.x * this.tileSize + 8;
+      const py = pickup.y * this.tileSize + 8;
+
+      const circle = this.add.circle(px, py, 5, 0xef4444).setStrokeStyle(1.5, 0xffffff).setDepth(8);
+      pickup.sprite = circle;
+
+      // Gentle floating animation
+      this.tweens.add({
+        targets: circle,
+        y: py - 3,
+        duration: 600,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    });
+  }
+
+  private checkItemPickup(x: number, y: number) {
+    const raw = localStorage.getItem('monster_proto_collected_items');
+    const collected: Record<string, boolean> = raw ? JSON.parse(raw) : {};
+
+    const pickup = this.itemPickups.find(p => p.x === x && p.y === y && !collected[p.id]);
+    if (!pickup) return;
+
+    collected[pickup.id] = true;
+    localStorage.setItem('monster_proto_collected_items', JSON.stringify(collected));
+
+    if (pickup.sprite) {
+      pickup.sprite.destroy();
+    }
+
+    // Add to inventory
+    const rawInv = localStorage.getItem('monster_proto_inventory');
+    const inv: InventoryBag = rawInv ? { ...DEFAULT_INVENTORY, ...JSON.parse(rawInv) } : { ...DEFAULT_INVENTORY };
+    inv[pickup.itemId] = (inv[pickup.itemId] || 0) + 1;
+    localStorage.setItem('monster_proto_inventory', JSON.stringify(inv));
+
+    Sound.playCatchSuccess();
+    const item = ITEMS[pickup.itemId];
+    this.logText.setText(`🎁 Found a ${item?.name || 'Item'}! Added to your Bag!`);
+
+    const toast = document.getElementById('save-toast');
+    if (toast) {
+      toast.innerText = `🎁 Found a ${item?.name || 'Item'}!`;
+      toast.style.background = '#16a34a';
+      toast.style.opacity = '1';
+      setTimeout(() => (toast.style.opacity = '0'), 1800);
+    }
+  }
+
   private triggerEncounter(zone: EncounterZone) {
     if (this.isMoving) return;
     this.isMoving = true;
@@ -183,6 +401,7 @@ export class OverworldScene extends Phaser.Scene {
     const speciesId = Phaser.Utils.Array.GetRandom(zone.speciesIds);
     const wildSpecies = getSpecies(speciesId);
 
+    Sound.playWiggle();
     this.logText.setText(`Wild ${wildSpecies.name} (Lv ${level}, ${wildSpecies.type}) appeared!`);
     this.cameras.main.flash(350, 255, 255, 255);
 
@@ -299,6 +518,7 @@ export class OverworldScene extends Phaser.Scene {
     try {
       localStorage.setItem('monster_proto_party', JSON.stringify(party));
     } catch {}
+    Sound.playRevitalize();
     if (this.logText && this.logText.active) {
       this.logText.setText('💖 Revitalized! All team members restored to full HP!');
     }
@@ -326,5 +546,152 @@ export class OverworldScene extends Phaser.Scene {
       dex,
       returnScene: 'OverworldScene'
     });
+  }
+
+  private setupMultiplayer() {
+    const mp = MultiplayerManager.getInstance();
+    mp.connect();
+
+    mp.onPlayersUpdated((players) => {
+      // Remove disconnected players
+      const activeIds = new Set(players.map(p => p.id));
+      for (const [id, spr] of this.otherPlayerSprites.entries()) {
+        if (!activeIds.has(id)) {
+          spr.rect.destroy();
+          spr.nameTag.destroy();
+          this.otherPlayerSprites.delete(id);
+        }
+      }
+
+      // Render/update positions of other players
+      players.forEach(p => {
+        const px = p.x * this.tileSize + 8;
+        const py = p.y * this.tileSize + 8;
+
+        let entry = this.otherPlayerSprites.get(p.id);
+        if (!entry) {
+          const rect = this.add.rectangle(px, py, 12, 12, 0x06b6d4).setDepth(9)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => this.showChallengePrompt(p));
+
+          const nameTag = this.add.text(px, py - 12, p.name || 'Trainer', {
+            fontSize: '8px',
+            color: '#38bdf8',
+            backgroundColor: '#0f172aEE',
+            padding: { x: 3, y: 1 }
+          }).setOrigin(0.5).setDepth(10);
+
+          entry = { rect, nameTag };
+          this.otherPlayerSprites.set(p.id, entry);
+        } else {
+          entry.rect.setPosition(px, py);
+          entry.nameTag.setPosition(px, py - 12);
+        }
+      });
+    });
+
+    mp.onChallenged((fromId, fromName) => {
+      this.showIncomingChallenge(fromId, fromName);
+    });
+
+    mp.onMatchStart((battleId, oppName) => {
+      this.logText.setText(`⚔️ Matched with ${oppName}! Starting PvP battle...`);
+      Sound.playLevelUp();
+    });
+  }
+
+  private showChallengePrompt(target: PlayerPresence) {
+    if (this.championPromptContainer) {
+      this.championPromptContainer.destroy();
+      this.championPromptContainer = undefined;
+    }
+
+    const container = this.add.container(240, 160).setScrollFactor(0).setDepth(300);
+    this.championPromptContainer = container;
+
+    const bg = this.add.rectangle(0, 0, 300, 120, 0x0f172a, 0.95).setStrokeStyle(2, 0x06b6d4);
+    const title = this.add.text(0, -35, `⚔️ PvP Challenge: ${target.name}`, {
+      fontSize: '12px',
+      color: '#38bdf8',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const desc = this.add.text(0, -10, 'Challenge this trainer to a live 3v3 PvP battle?', {
+      fontSize: '10px',
+      color: '#cbd5e1'
+    }).setOrigin(0.5);
+
+    const sendBtn = this.add.rectangle(-60, 25, 100, 28, 0x0284c7)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        MultiplayerManager.getInstance().challengePlayer(target.id);
+        this.logText.setText(`Sent PvP challenge to ${target.name}! Waiting for response...`);
+        container.destroy();
+        this.championPromptContainer = undefined;
+      });
+
+    const sendTxt = this.add.text(-60, 25, 'Challenge', {
+      fontSize: '10px',
+      color: '#fff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const cancelBtn = this.add.rectangle(60, 25, 80, 28, 0x475569)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        container.destroy();
+        this.championPromptContainer = undefined;
+      });
+
+    const cancelTxt = this.add.text(60, 25, 'Cancel', {
+      fontSize: '10px',
+      color: '#fff'
+    }).setOrigin(0.5);
+
+    container.add([bg, title, desc, sendBtn, sendTxt, cancelBtn, cancelTxt]);
+  }
+
+  private showIncomingChallenge(fromId: string, fromName: string) {
+    Sound.playWiggle();
+    const container = this.add.container(240, 160).setScrollFactor(0).setDepth(300);
+
+    const bg = this.add.rectangle(0, 0, 310, 120, 0x0f172a, 0.98).setStrokeStyle(2, 0x22c55e);
+    const title = this.add.text(0, -35, `⚔️ Incoming PvP Challenge!`, {
+      fontSize: '13px',
+      color: '#4ade80',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const desc = this.add.text(0, -10, `${fromName} has challenged you to a 3v3 PvP battle!`, {
+      fontSize: '10px',
+      color: '#f8fafc'
+    }).setOrigin(0.5);
+
+    const acceptBtn = this.add.rectangle(-60, 25, 90, 28, 0x16a34a)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        MultiplayerManager.getInstance().respondChallenge(fromId, true);
+        container.destroy();
+      });
+
+    const acceptTxt = this.add.text(-60, 25, 'Accept', {
+      fontSize: '10px',
+      color: '#fff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const declineBtn = this.add.rectangle(60, 25, 90, 28, 0xdc2626)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        MultiplayerManager.getInstance().respondChallenge(fromId, false);
+        container.destroy();
+      });
+
+    const declineTxt = this.add.text(60, 25, 'Decline', {
+      fontSize: '10px',
+      color: '#fff'
+    }).setOrigin(0.5);
+
+    container.add([bg, title, desc, acceptBtn, acceptTxt, declineBtn, declineTxt]);
   }
 }

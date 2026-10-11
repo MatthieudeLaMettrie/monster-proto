@@ -7,3 +7,4 @@ export * from './battle.js';
 export * from './zones.js';
 export * from './protocol.js';
 export * from './multiplayerProtocol.js';
+export * from './items.js';
