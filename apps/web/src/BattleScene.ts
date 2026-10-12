@@ -843,7 +843,7 @@ export class BattleScene extends Phaser.Scene {
           this.time.delayedCall(1500, () => {
             // Revitalize party and return
             this.playerParty.forEach(m => (m.currentHp = m.maxHp));
-            this.returnTile = { x: 5, y: 5 }; // Return to safe town
+            this.returnTile = { x: 10, y: 10 }; // Return to safe town Pallet Plaza
             this.endBattle(false);
           });
         });

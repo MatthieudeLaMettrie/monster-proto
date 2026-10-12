@@ -23,15 +23,22 @@ interface ItemPickup {
   sprite?: Phaser.GameObjects.Arc;
 }
 
+export interface Signpost {
+  x: number;
+  y: number;
+  title: string;
+  text: string;
+}
+
 export class OverworldScene extends Phaser.Scene {
   private mapData: any;
-  private playerTile = { x: 5, y: 5 };
+  private playerTile = { x: 10, y: 10 };
   private playerSprite!: Phaser.GameObjects.Image;
   private facing: 'down' | 'up' | 'left' | 'right' = 'down';
   private stepToggle = false;
   private companionSprite?: Phaser.GameObjects.Image;
   private companionShadow?: Phaser.GameObjects.Ellipse;
-  private companionTile = { x: 5, y: 5 };
+  private companionTile = { x: 10, y: 11 };
   private tileSize = 16;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: {
@@ -41,18 +48,43 @@ export class OverworldScene extends Phaser.Scene {
     D: Phaser.Input.Keyboard.Key;
   };
   private isMoving = false;
+  private isSprinting = false;
+  private shiftKey?: Phaser.Input.Keyboard.Key;
+  private sprintBtnText?: Phaser.GameObjects.Text;
   private encounterCooldownSteps = 0;
   private bannerText!: Phaser.GameObjects.Text;
   private logText!: Phaser.GameObjects.Text;
 
   private itemPickups: ItemPickup[] = [
-    { id: 'item-route1', x: 16, y: 4, itemId: 'potion' },
-    { id: 'item-lake', x: 6, y: 18, itemId: 'super_potion' },
-    { id: 'item-crags', x: 31, y: 5, itemId: 'ultra_capsule' },
-    { id: 'item-grove', x: 21, y: 20, itemId: 'revive' },
-    { id: 'item-dojo', x: 32, y: 24, itemId: 'super_potion' }
+    { id: 'item-town', x: 15, y: 7, itemId: 'potion' },
+    { id: 'item-route1-n', x: 28, y: 6, itemId: 'potion' },
+    { id: 'item-route1-clearing', x: 33, y: 4, itemId: 'ultra_capsule' },
+    { id: 'item-route1-s', x: 40, y: 16, itemId: 'super_potion' },
+    { id: 'item-lake-shore', x: 5, y: 24, itemId: 'super_potion' },
+    { id: 'item-lake-pier', x: 14, y: 28, itemId: 'super_potion' },
+    { id: 'item-lake-island', x: 15, y: 38, itemId: 'ultra_capsule' },
+    { id: 'item-grotto', x: 8, y: 54, itemId: 'revive' },
+    { id: 'item-grotto-deep', x: 17, y: 55, itemId: 'ultra_capsule' },
+    { id: 'item-grove-shrine', x: 38, y: 39, itemId: 'ultra_capsule' },
+    { id: 'item-grove-glade', x: 48, y: 53, itemId: 'revive' },
+    { id: 'item-crags-foot', x: 50, y: 11, itemId: 'super_potion' },
+    { id: 'item-volcano-peak', x: 65, y: 8, itemId: 'revive' },
+    { id: 'item-celestial-ridge', x: 72, y: 32, itemId: 'super_potion' },
+    { id: 'item-dojo-stair', x: 61, y: 46, itemId: 'revive' },
+    { id: 'item-dojo-secret', x: 74, y: 49, itemId: 'ultra_capsule' }
   ];
 
+  private signposts: Signpost[] = [
+    { x: 15, y: 9, title: '📍 PALLET PLAZA CROSSROADS', text: 'East: Route 1 Meadow & Ember Volcano\nSouth: Lake Azure Pier & Sunken Grotto' },
+    { x: 26, y: 9, title: '🌾 ROUTE 1 MEADOW', text: 'Watch for wild Sproutle and Boxerpup in tall grass!\nNorth clearing holds hidden treasures.' },
+    { x: 44, y: 10, title: '🧭 CONTINENTAL JUNCTION', text: 'North-East: Ember Crags & Dragon Peaks\nSouth: Old Grove Enchanted Woods\nFar East: Celestial Summit & Dojo' },
+    { x: 10, y: 22, title: '🌊 LAKE AZURE DOCK', text: 'Crystal waters home to Puddlefin and Skylark.\nLegend speaks of a secret island across the sandbar.' },
+    { x: 30, y: 22, title: '🌲 OLD GROVE ENTRANCE', text: 'Ancient canopy ahead. Deep whispers lead to the\nforgotten Fairy Shrine.' },
+    { x: 48, y: 13, title: '🌋 EMBER CRAGS PASS', text: 'Hazard Warning: Extreme volcanic heat!\nHome to wild Emberpup and fierce dragons.' },
+    { x: 60, y: 44, title: '🥋 DOJO CHAMPION RIDGE', text: 'Ascend to the Grand Pagoda.\nMaster Aaron awaits worthy challengers!' }
+  ];
+
+  private signDialogContainer?: Phaser.GameObjects.Container;
   private championPromptContainer?: Phaser.GameObjects.Container;
   private otherPlayerSprites: Map<string, { rect: Phaser.GameObjects.Rectangle; nameTag: Phaser.GameObjects.Text }> = new Map();
 
@@ -102,6 +134,7 @@ export class OverworldScene extends Phaser.Scene {
     // Controls
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
+      this.shiftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
       this.wasd = {
         W: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
         A: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
@@ -118,26 +151,44 @@ export class OverworldScene extends Phaser.Scene {
       padding: { x: 8, y: 5 }
     }).setScrollFactor(0).setDepth(200);
 
+    // Sprint Mode Button (Top-Right, left of Party)
+    const sprintBg = this.add.rectangle(325, 20, 84, 26, 0x334155)
+      .setScrollFactor(0)
+      .setDepth(200)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.isSprinting = !this.isSprinting;
+        sprintBg.setFillStyle(this.isSprinting ? 0xe11d48 : 0x334155);
+        this.sprintBtnText?.setText(this.isSprinting ? '👟 SPRINT: ON' : '👟 SPRINT: OFF');
+      });
+
+    this.sprintBtnText = this.add.text(325, 20, '👟 SPRINT: OFF', {
+      fontSize: '9px',
+      color: '#FFFFFF',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
     // Big Prominent Party & DEX Button (Top-Right)
-    this.add.rectangle(420, 20, 96, 30, 0x0284c7)
+    this.add.rectangle(425, 20, 96, 26, 0x0284c7)
       .setScrollFactor(0)
       .setDepth(200)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.openPartyMenu());
 
-    this.add.text(420, 20, '👥 PARTY / DEX', {
+    this.add.text(425, 20, '👥 PARTY / DEX', {
       fontSize: '10px',
       color: '#FFFFFF',
       fontStyle: 'bold'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
-    this.logText = this.add.text(12, 296, 'Move with Arrows / WASD. Walk on tall grass for encounters.', {
+    this.logText = this.add.text(12, 296, 'Move with Arrows / WASD. Hold Shift or tap 👟 SPRINT for high speed!', {
       fontSize: '10px',
       color: '#CBD5E1',
       backgroundColor: '#0f172aEE',
       padding: { x: 8, y: 4 }
     }).setScrollFactor(0).setDepth(200);
 
+    this.renderSignposts();
     this.createVirtualDpad();
   }
 
@@ -160,10 +211,14 @@ export class OverworldScene extends Phaser.Scene {
   private attemptMove(dx: number, dy: number) {
     if (this.isMoving) return;
 
-    // Dismiss champion prompt if moving away
+    // Dismiss champion and sign dialogs if moving away
     if (this.championPromptContainer) {
       this.championPromptContainer.destroy();
       this.championPromptContainer = undefined;
+    }
+    if (this.signDialogContainer) {
+      this.signDialogContainer.destroy();
+      this.signDialogContainer = undefined;
     }
 
     const prevTile = { ...this.playerTile };
@@ -197,11 +252,26 @@ export class OverworldScene extends Phaser.Scene {
     this.stepToggle = !this.stepToggle;
     this.playerSprite.setTexture(`trainer-${this.facing}-${this.stepToggle ? 1 : 2}`);
 
+    const isSprint = this.isSprinting || Boolean(this.shiftKey && this.shiftKey.isDown);
+    const stepDuration = isSprint ? 70 : 130;
+
+    // Emit dust puff particle when sprinting
+    if (isSprint) {
+      const puff = this.add.circle(this.playerSprite.x, this.playerSprite.y + 10, 2.5, 0xe2e8f0, 0.75).setDepth(9);
+      this.tweens.add({
+        targets: puff,
+        scale: 1.8,
+        alpha: 0,
+        duration: 180,
+        onComplete: () => puff.destroy()
+      });
+    }
+
     this.tweens.add({
       targets: this.playerSprite,
       x: targetX * this.tileSize + 8,
       y: targetY * this.tileSize + 8,
-      duration: 130,
+      duration: stepDuration,
       ease: 'Linear',
       onComplete: () => {
         this.isMoving = false;
@@ -220,7 +290,7 @@ export class OverworldScene extends Phaser.Scene {
         targets: this.companionShadow,
         x: targetCX,
         y: targetCY + 5,
-        duration: 130,
+        duration: stepDuration,
         ease: 'Linear'
       });
 
@@ -228,7 +298,7 @@ export class OverworldScene extends Phaser.Scene {
         targets: this.companionSprite,
         x: targetCX,
         y: targetCY - 2,
-        duration: 130,
+        duration: stepDuration,
         ease: 'Linear'
       });
 
@@ -238,7 +308,7 @@ export class OverworldScene extends Phaser.Scene {
         scaleY: 0.44,
         scaleX: 0.58,
         yoyo: true,
-        duration: 65,
+        duration: Math.floor(stepDuration / 2),
         ease: 'Sine.easeInOut'
       });
     }
@@ -260,6 +330,12 @@ export class OverworldScene extends Phaser.Scene {
     if (x === this.mapData.championSpot.x && y === this.mapData.championSpot.y) {
       this.showChampionPrompt();
       return;
+    }
+
+    // Signpost proximity check
+    const nearbySign = this.signposts.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
+    if (nearbySign) {
+      this.logText.setText(`💡 Signpost nearby: "${nearbySign.title}". Click it to read directions!`);
     }
 
     // Zone detection
@@ -661,14 +737,26 @@ export class OverworldScene extends Phaser.Scene {
     // --- Pallet Plaza Pokémon Center Clinic Architecture ---
     this.renderPokemonCenter(gfx);
 
+    // --- Pallet Plaza Town Fountain ---
+    this.renderTownFountain(gfx);
+
+    // --- Lake Azure Wooden Pier ---
+    this.renderLakePier(gfx);
+
+    // --- Ancient Fairy Shrine ---
+    this.renderFairyShrine(gfx);
+
+    // --- Ember Crags Volcano Caldera ---
+    this.renderVolcanoCaldera(gfx);
+
     // --- Dojo Pagoda Gym Architecture ---
     this.renderDojoPagoda(gfx);
   }
 
   private renderPokemonCenter(gfx: Phaser.GameObjects.Graphics) {
-    // Clinic sits behind Heal Pad (5, 4): covering x: 3 to 7, y: 1 to 3
-    const startX = 3 * this.tileSize;
-    const startY = 1 * this.tileSize;
+    // Clinic sits behind Heal Pad (10, 8): covering x: 8 to 12, y: 5 to 7
+    const startX = 8 * this.tileSize;
+    const startY = 5 * this.tileSize;
     const bWidth = 5 * this.tileSize; // 80px
 
     // Main Gable Roof (Crimson red shingles with white verge)
@@ -714,13 +802,13 @@ export class OverworldScene extends Phaser.Scene {
     gfx.fillRect(signX - 1, signY - 1, 26, 14);
     gfx.fillStyle(0xffffff, 1);
     gfx.fillRect(signX, signY, 24, 12);
-    // Red medical cross / heart
+    // Red medical cross
     gfx.fillStyle(0xef4444, 1);
     gfx.fillRect(signX + 10, signY + 2, 4, 8);
     gfx.fillRect(signX + 7, signY + 4, 10, 4);
 
-    // Doorway frame right above Revitalize Pad at (5, 4)
-    const doorX = 5 * this.tileSize;
+    // Doorway frame right above Revitalize Pad at (10, 8)
+    const doorX = 10 * this.tileSize;
     gfx.fillStyle(0x0f172a, 1);
     gfx.fillRect(doorX + 1, wallY + 6, 14, 14);
     gfx.fillStyle(0x38bdf8, 0.7);
@@ -734,9 +822,9 @@ export class OverworldScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(4);
 
-    // Pulsing Revitalize Beacon over Heal Pad at (5, 4)
-    const hx = 5 * this.tileSize + 8;
-    const hy = 4 * this.tileSize + 8;
+    // Pulsing Revitalize Beacon over Heal Pad at (10, 8)
+    const hx = 10 * this.tileSize + 8;
+    const hy = 8 * this.tileSize + 8;
     const beacon = this.add.circle(hx, hy, 9).setStrokeStyle(1.5, 0x38bdf8, 0.8).setDepth(3);
     this.tweens.add({
       targets: beacon,
@@ -757,42 +845,233 @@ export class OverworldScene extends Phaser.Scene {
     });
   }
 
+  private renderTownFountain(gfx: Phaser.GameObjects.Graphics) {
+    // Pallet Plaza Fountain at (10, 12)
+    const fx = 10 * this.tileSize + 8;
+    const fy = 12 * this.tileSize + 8;
+
+    // Stone fountain basin
+    gfx.fillStyle(0x475569, 1);
+    gfx.fillCircle(fx, fy, 11);
+    gfx.fillStyle(0x64748b, 1);
+    gfx.fillCircle(fx, fy, 10);
+    // Clear blue water pool
+    gfx.fillStyle(0x0284c7, 1);
+    gfx.fillCircle(fx, fy, 8);
+    gfx.fillStyle(0x38bdf8, 0.85);
+    gfx.fillCircle(fx, fy, 6);
+    // Center fountain nozzle / pedestal
+    gfx.fillStyle(0x94a3b8, 1);
+    gfx.fillCircle(fx, fy, 3);
+
+    // Water jet particles
+    const spray1 = this.add.circle(fx, fy - 1, 1.5, 0xffffff, 0.8).setDepth(5);
+    const spray2 = this.add.circle(fx + 2, fy, 1.2, 0xe0f2fe, 0.7).setDepth(5);
+    this.tweens.add({
+      targets: [spray1, spray2],
+      y: '-=5',
+      alpha: 0.2,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+  }
+
+  private renderLakePier(gfx: Phaser.GameObjects.Graphics) {
+    // Pier spans x: 13..15, y: 24..28
+    const px = 13 * this.tileSize;
+    const py = 24 * this.tileSize;
+    const pw = 3 * this.tileSize;
+    const ph = 5 * this.tileSize;
+
+    // Wooden deck slats
+    gfx.fillStyle(0x78350f, 1); // Dark timber base
+    gfx.fillRect(px, py, pw, ph);
+
+    for (let y = py; y < py + ph; y += 4) {
+      gfx.fillStyle(0x92400e, 1); // Light plank
+      gfx.fillRect(px + 1, y, pw - 2, 3);
+      gfx.fillStyle(0x451a03, 1); // Seam
+      gfx.fillRect(px, y + 3, pw, 1);
+    }
+
+    // Wooden edge railing / posts
+    [py, py + 16, py + 32, py + ph - 2].forEach(postY => {
+      gfx.fillStyle(0x451a03, 1);
+      gfx.fillRect(px, postY, 2, 3);
+      gfx.fillRect(px + pw - 2, postY, 2, 3);
+    });
+
+    // Pier end bollard
+    gfx.fillStyle(0xb45309, 1);
+    gfx.fillCircle(px + pw / 2, py + ph - 2, 3);
+  }
+
+  private renderFairyShrine(gfx: Phaser.GameObjects.Graphics) {
+    // Old Grove Fairy Shrine at (38, 38)
+    const sx = 38 * this.tileSize + 8;
+    const sy = 38 * this.tileSize + 8;
+
+    // Glowing mystical circle
+    gfx.fillStyle(0xc084fc, 0.25);
+    gfx.fillCircle(sx, sy, 14);
+    gfx.lineStyle(1.5, 0xe879f9, 0.8);
+    gfx.strokeCircle(sx, sy, 12);
+
+    // Ancient rune glyphs
+    gfx.fillStyle(0xfdf4ff, 0.9);
+    gfx.fillRect(sx - 4, sy - 1, 8, 2);
+    gfx.fillRect(sx - 1, sy - 4, 2, 8);
+
+    // Floating fairy spark
+    const spark = this.add.text(sx, sy - 2, '✨', { fontSize: '10px' }).setOrigin(0.5).setDepth(5);
+    this.tweens.add({
+      targets: spark,
+      y: sy - 8,
+      scale: 1.25,
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+  }
+
+  private renderVolcanoCaldera(gfx: Phaser.GameObjects.Graphics) {
+    // Lava Caldera at x: 62..68, y: 6..10
+    const vx = 62 * this.tileSize;
+    const vy = 6 * this.tileSize;
+    const vw = 7 * this.tileSize;
+    const vh = 5 * this.tileSize;
+
+    // Basalt rim shadow
+    gfx.fillStyle(0x1c1917, 1);
+    gfx.fillRect(vx, vy, vw, vh);
+
+    // Molten magma surface
+    gfx.fillStyle(0xd97706, 1);
+    gfx.fillRect(vx + 2, vy + 2, vw - 4, vh - 4);
+    gfx.fillStyle(0xef4444, 0.9);
+    gfx.fillRect(vx + 4, vy + 4, vw - 8, vh - 8);
+    gfx.fillStyle(0xfde047, 0.8);
+    gfx.fillCircle(vx + vw / 2, vy + vh / 2, 10);
+
+    // Steam / smoke wisps
+    const smoke = this.add.circle(vx + vw / 2, vy + vh / 2, 4, 0xfca5a5, 0.4).setDepth(6);
+    this.tweens.add({
+      targets: smoke,
+      y: '-=16',
+      scale: 2.2,
+      alpha: 0,
+      duration: 1400,
+      repeat: -1
+    });
+  }
+
   private renderDojoPagoda(gfx: Phaser.GameObjects.Graphics) {
-    // Dojo Pagoda gym facade around x: 32 to 36, y: 18 to 20
-    const startX = 32 * this.tileSize;
-    const startY = 18 * this.tileSize;
-    const bWidth = 5 * this.tileSize; // 80px
+    // Dojo Pagoda gym facade at x: 64 to 72, y: 39 to 41
+    const startX = 64 * this.tileSize;
+    const startY = 39 * this.tileSize;
+    const bWidth = 9 * this.tileSize; // 144px
 
     // Pagoda Crimson & Gold Eaves Roof
     gfx.fillStyle(0x78350f, 1); // Eave under-shadow
-    gfx.fillRect(startX, startY + 2, bWidth, 18);
+    gfx.fillRect(startX, startY + 2, bWidth, 20);
     gfx.fillStyle(0x991b1b, 1); // Imperial crimson tiles
-    gfx.fillRect(startX + 2, startY + 4, bWidth - 4, 14);
+    gfx.fillRect(startX + 2, startY + 4, bWidth - 4, 16);
 
-    // Upturned Golden Eave Corners (Pagoda finials)
+    // Golden Roof Ridge & Upturned Finials
     gfx.fillStyle(0xf59e0b, 1);
-    gfx.fillRect(startX - 2, startY + 1, 5, 4);
-    gfx.fillRect(startX + bWidth - 3, startY + 1, 5, 4);
-    gfx.fillRect(startX + bWidth / 2 - 6, startY, 12, 3); // Center ridge
+    gfx.fillRect(startX - 4, startY + 1, 8, 5);
+    gfx.fillRect(startX + bWidth - 4, startY + 1, 8, 5);
+    gfx.fillRect(startX + bWidth / 2 - 16, startY, 32, 4); // Center ridge
 
     // Sturdy Martial Timber Pillars
-    const pillarY = startY + 18;
-    const pillarH = 22;
-    [startX + 2, startX + 24, startX + bWidth - 28, startX + bWidth - 6].forEach((px) => {
+    const pillarY = startY + 20;
+    const pillarH = 26;
+    [startX + 4, startX + 36, startX + bWidth - 40, startX + bWidth - 8].forEach((px) => {
       gfx.fillStyle(0x451a03, 1);
-      gfx.fillRect(px, pillarY, 5, pillarH);
+      gfx.fillRect(px, pillarY, 6, pillarH);
       gfx.fillStyle(0x78350f, 1);
-      gfx.fillRect(px + 1, pillarY, 3, pillarH);
+      gfx.fillRect(px + 1, pillarY, 4, pillarH);
       gfx.fillStyle(0xd97706, 1); // Gold base trim
-      gfx.fillRect(px, pillarY + pillarH - 2, 5, 2);
+      gfx.fillRect(px, pillarY + pillarH - 3, 6, 3);
     });
 
     // Dojo Gym Banner Text
-    this.add.text(startX + bWidth / 2, startY + 10, '🥋 DOJO GYM', {
-      fontSize: '8px',
+    this.add.text(startX + bWidth / 2, startY + 11, '🥋 GRAND PAGODA DOJO', {
+      fontSize: '9px',
       color: '#fef08a',
       fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(4);
+  }
+
+  private renderSignposts() {
+    this.signposts.forEach((sign) => {
+      const sx = sign.x * this.tileSize + 8;
+      const sy = sign.y * this.tileSize + 8;
+
+      // Wooden post + sign board graphic
+      const postGfx = this.add.graphics().setDepth(7);
+      // Post
+      postGfx.fillStyle(0x451a03, 1);
+      postGfx.fillRect(sx - 2, sy + 1, 4, 7);
+      // Board
+      postGfx.fillStyle(0xb45309, 1);
+      postGfx.fillRoundedRect(sx - 6, sy - 6, 12, 9, 2);
+      postGfx.lineStyle(1, 0x78350f, 1);
+      postGfx.strokeRoundedRect(sx - 6, sy - 6, 12, 9, 2);
+      // Lettering markings
+      postGfx.fillStyle(0xfef08a, 0.9);
+      postGfx.fillRect(sx - 4, sy - 4, 8, 1.5);
+      postGfx.fillRect(sx - 4, sy - 1, 5, 1.5);
+
+      // Interactive hit zone
+      const hitZone = this.add.zone(sx, sy, 16, 16).setInteractive({ useHandCursor: true }).setDepth(8);
+      hitZone.on('pointerdown', () => {
+        this.showSignDialog(sign);
+      });
+    });
+  }
+
+  private showSignDialog(sign: Signpost) {
+    if (this.signDialogContainer) {
+      this.signDialogContainer.destroy();
+      this.signDialogContainer = undefined;
+    }
+
+    Sound.playWiggle();
+    this.signDialogContainer = this.add.container(240, 160).setScrollFactor(0).setDepth(300);
+
+    const bg = this.add.rectangle(0, 0, 320, 130, 0x0f172a, 0.96).setStrokeStyle(2, 0xd97706);
+    const headerBg = this.add.rectangle(0, -42, 316, 26, 0x78350f);
+    const title = this.add.text(0, -42, sign.title, {
+      fontSize: '11px',
+      color: '#fef08a',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const body = this.add.text(0, 0, sign.text, {
+      fontSize: '10px',
+      color: '#f1f5f9',
+      align: 'center',
+      lineSpacing: 5
+    }).setOrigin(0.5);
+
+    const closeBtn = this.add.rectangle(0, 42, 80, 24, 0x334155)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.signDialogContainer?.destroy();
+        this.signDialogContainer = undefined;
+      });
+
+    const closeTxt = this.add.text(0, 42, 'Close', {
+      fontSize: '10px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    this.signDialogContainer.add([bg, headerBg, title, body, closeBtn, closeTxt]);
   }
 
   private createVirtualDpad() {
