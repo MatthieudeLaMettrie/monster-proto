@@ -284,14 +284,29 @@ export class OverworldScene extends Phaser.Scene {
     if (this.companionSprite && this.companionShadow) {
       const targetCX = prevTile.x * this.tileSize + 8;
       const targetCY = prevTile.y * this.tileSize + 8;
-      this.companionTile = prevTile;
+      this.companionTile = { ...prevTile };
+
+      // Kill any conflicting tweens so it never jitters or jumps
+      this.tweens.killTweensOf(this.companionSprite);
+      this.tweens.killTweensOf(this.companionShadow);
+      this.companionSprite.setScale(0.52);
+
+      // Smoothly flip sprite horizontally based on travel direction
+      if (targetCX < this.companionSprite.x) {
+        this.companionSprite.setFlipX(true);
+      } else if (targetCX > this.companionSprite.x) {
+        this.companionSprite.setFlipX(false);
+      }
 
       this.tweens.add({
         targets: this.companionShadow,
         x: targetCX,
         y: targetCY + 5,
         duration: stepDuration,
-        ease: 'Linear'
+        ease: 'Linear',
+        onComplete: () => {
+          this.companionShadow?.setPosition(targetCX, targetCY + 5);
+        }
       });
 
       this.tweens.add({
@@ -299,17 +314,10 @@ export class OverworldScene extends Phaser.Scene {
         x: targetCX,
         y: targetCY - 2,
         duration: stepDuration,
-        ease: 'Linear'
-      });
-
-      // Joyful little hop while stepping
-      this.tweens.add({
-        targets: this.companionSprite,
-        scaleY: 0.44,
-        scaleX: 0.58,
-        yoyo: true,
-        duration: Math.floor(stepDuration / 2),
-        ease: 'Sine.easeInOut'
+        ease: 'Linear',
+        onComplete: () => {
+          this.companionSprite?.setPosition(targetCX, targetCY - 2);
+        }
       });
     }
   }
@@ -1112,7 +1120,20 @@ export class OverworldScene extends Phaser.Scene {
       this.companionShadow = undefined;
     }
 
-    this.companionTile = { x: this.playerTile.x, y: this.playerTile.y };
+    // Position companion 1 tile behind player depending on facing direction
+    let behindX = this.playerTile.x;
+    let behindY = this.playerTile.y;
+    if (this.facing === 'down') behindY -= 1;
+    else if (this.facing === 'up') behindY += 1;
+    else if (this.facing === 'left') behindX += 1;
+    else if (this.facing === 'right') behindX -= 1;
+
+    const width = this.mapData?.width ?? 80;
+    const height = this.mapData?.height ?? 60;
+    behindX = Phaser.Math.Clamp(behindX, 0, width - 1);
+    behindY = Phaser.Math.Clamp(behindY, 0, height - 1);
+
+    this.companionTile = { x: behindX, y: behindY };
     const cx = this.companionTile.x * this.tileSize + 8;
     const cy = this.companionTile.y * this.tileSize + 8;
 
@@ -1122,16 +1143,6 @@ export class OverworldScene extends Phaser.Scene {
       .setDepth(9)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.interactWithCompanion());
-
-    // Idle bobbing
-    this.tweens.add({
-      targets: this.companionSprite,
-      y: cy - 4,
-      duration: 750,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut'
-    });
   }
 
   public refreshCompanion() {
@@ -1159,13 +1170,21 @@ export class OverworldScene extends Phaser.Scene {
     Sound.playWiggle();
 
     // Joyful hop
+    this.tweens.killTweensOf(this.companionSprite);
+    const baseX = this.companionTile.x * this.tileSize + 8;
+    const baseY = this.companionTile.y * this.tileSize + 8 - 2;
+    this.companionSprite.setPosition(baseX, baseY);
+
     this.tweens.add({
       targets: this.companionSprite,
-      y: '-=10',
+      y: baseY - 6,
       yoyo: true,
-      duration: 160,
+      duration: 150,
       repeat: 1,
-      ease: 'Sine.easeOut'
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        this.companionSprite?.setPosition(baseX, baseY);
+      }
     });
 
     const moods = [
