@@ -10,7 +10,11 @@ import {
   ITEMS,
   DEFAULT_INVENTORY,
   InventoryBag,
-  PlayerPresence
+  PlayerPresence,
+  GYM_LEADERS,
+  GymLeaderDef,
+  BADGES,
+  REQUIRED_BADGES_FOR_CHAMPION
 } from '@monster-proto/shared';
 import { Sound } from './SoundManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
@@ -87,6 +91,7 @@ export class OverworldScene extends Phaser.Scene {
 
   private signDialogContainer?: Phaser.GameObjects.Container;
   private championPromptContainer?: Phaser.GameObjects.Container;
+  private gymLeaderPromptContainer?: Phaser.GameObjects.Container;
   private otherPlayerSprites: Map<string, { rect: Phaser.GameObjects.Rectangle; nameTag: Phaser.GameObjects.Text }> = new Map();
 
   constructor() {
@@ -109,6 +114,7 @@ export class OverworldScene extends Phaser.Scene {
     this.renderTiles();
     this.renderItemPickups();
     this.renderChampionNpc();
+    this.renderGymLeaderNpcs();
     this.setupMultiplayer();
 
     // Create player avatar with 20x28 retro pixel-art
@@ -216,6 +222,10 @@ export class OverworldScene extends Phaser.Scene {
     if (this.championPromptContainer) {
       this.championPromptContainer.destroy();
       this.championPromptContainer = undefined;
+    }
+    if (this.gymLeaderPromptContainer) {
+      this.gymLeaderPromptContainer.destroy();
+      this.gymLeaderPromptContainer = undefined;
     }
     if (this.signDialogContainer) {
       this.signDialogContainer.destroy();
@@ -341,6 +351,19 @@ export class OverworldScene extends Phaser.Scene {
       return;
     }
 
+    // Check Gym Leader spots
+    const leader = GYM_LEADERS.find(l => l.tile.x === x && l.tile.y === y);
+    if (leader) {
+      this.showGymLeaderPrompt(leader);
+      return;
+    }
+
+    // Nearby Gym Leader proximity alert
+    const nearbyLeader = GYM_LEADERS.find(l => Math.abs(l.tile.x - x) <= 1 && Math.abs(l.tile.y - y) <= 1);
+    if (nearbyLeader) {
+      this.logText.setText(`⚔️ Gym Leader nearby: ${nearbyLeader.name} (${nearbyLeader.title})! Click them to interact.`);
+    }
+
     // Signpost proximity check
     const nearbySign = this.signposts.find(s => Math.abs(s.x - x) <= 1 && Math.abs(s.y - y) <= 1);
     if (nearbySign) {
@@ -382,49 +405,248 @@ export class OverworldScene extends Phaser.Scene {
       backgroundColor: '#0f172aEE',
       padding: { x: 3, y: 1 }
     }).setOrigin(0.5).setDepth(10);
+
+    const hitZone = this.add.zone(cx, cy, 20, 20).setInteractive({ useHandCursor: true }).setDepth(11);
+    hitZone.on('pointerdown', () => this.showChampionPrompt());
+  }
+
+  private renderGymLeaderNpcs() {
+    GYM_LEADERS.forEach((leader) => {
+      const lx = leader.tile.x * this.tileSize + 8;
+      const ly = leader.tile.y * this.tileSize + 8;
+
+      // Leader avatar
+      this.add.circle(lx, ly, 7, leader.color).setStrokeStyle(2, 0xffffff).setDepth(9);
+      this.add.text(lx, ly, leader.avatarIcon, { fontSize: '8px' }).setOrigin(0.5).setDepth(10);
+
+      this.add.text(lx, ly - 14, `${leader.avatarIcon} ${leader.name}`, {
+        fontSize: '8px',
+        color: '#ffffff',
+        backgroundColor: '#0f172aEE',
+        padding: { x: 3, y: 1 }
+      }).setOrigin(0.5).setDepth(10);
+
+      // Interactive hit zone
+      const hitZone = this.add.zone(lx, ly, 20, 20).setInteractive({ useHandCursor: true }).setDepth(11);
+      hitZone.on('pointerdown', () => {
+        this.showGymLeaderPrompt(leader);
+      });
+    });
+  }
+
+  private showGymLeaderPrompt(leader: GymLeaderDef) {
+    if (this.gymLeaderPromptContainer) {
+      this.gymLeaderPromptContainer.destroy();
+      this.gymLeaderPromptContainer = undefined;
+    }
+
+    let badges: Record<string, any> = {};
+    try {
+      const raw = localStorage.getItem('monster_proto_badges');
+      if (raw) badges = JSON.parse(raw);
+    } catch {}
+
+    const hasBadge = !!badges[leader.badgeId];
+
+    this.gymLeaderPromptContainer = this.add.container(240, 160).setScrollFactor(0).setDepth(300);
+
+    const bg = this.add.rectangle(0, 0, 320, 150, 0x0f172a, 0.96)
+      .setStrokeStyle(2, leader.color);
+
+    const title = this.add.text(0, -50, `${leader.avatarIcon} ${leader.name.toUpperCase()} • ${leader.title}`, {
+      fontSize: '11px',
+      color: '#f8fafc',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const bodyText = hasBadge
+      ? `${leader.alreadyBeatenDialog}\n\n🏆 You have already earned the ${leader.badgeName}!`
+      : `${leader.introDialog}\n\nReward: 🏆 ${leader.badgeName}`;
+
+    const desc = this.add.text(0, -8, bodyText, {
+      fontSize: '9.5px',
+      color: hasBadge ? '#4ade80' : '#cbd5e1',
+      align: 'center',
+      wordWrap: { width: 280 }
+    }).setOrigin(0.5);
+
+    if (hasBadge) {
+      const closeBtn = this.add.rectangle(0, 48, 90, 26, 0x334155)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.gymLeaderPromptContainer?.destroy();
+          this.gymLeaderPromptContainer = undefined;
+        });
+
+      const closeTxt = this.add.text(0, 48, 'Close', {
+        fontSize: '10px',
+        color: '#fff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+
+      this.gymLeaderPromptContainer.add([bg, title, desc, closeBtn, closeTxt]);
+    } else {
+      const challengeBtn = this.add.rectangle(-65, 48, 120, 28, leader.color)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.startGymLeaderBattle(leader));
+
+      const challengeTxt = this.add.text(-65, 48, '⚔️ Challenge (2v2)', {
+        fontSize: '10px',
+        color: '#fff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+
+      const leaveBtn = this.add.rectangle(75, 48, 90, 28, 0x475569)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.gymLeaderPromptContainer?.destroy();
+          this.gymLeaderPromptContainer = undefined;
+        });
+
+      const leaveTxt = this.add.text(75, 48, 'Leave', {
+        fontSize: '10px',
+        color: '#fff'
+      }).setOrigin(0.5);
+
+      this.gymLeaderPromptContainer.add([bg, title, desc, challengeBtn, challengeTxt, leaveBtn, leaveTxt]);
+    }
+  }
+
+  private startGymLeaderBattle(leader: GymLeaderDef) {
+    this.gymLeaderPromptContainer?.destroy();
+    this.gymLeaderPromptContainer = undefined;
+
+    Sound.playWiggle();
+    this.cameras.main.flash(400, (leader.color >> 16) & 0xff, (leader.color >> 8) & 0xff, leader.color & 0xff);
+
+    const playerParty = this.getPlayerParty();
+
+    const gymTeam: MonsterInstance[] = leader.team.map((m, idx) => {
+      const spec = getSpecies(m.speciesId);
+      const maxHp = calculateMaxHp(spec.baseStats.hp, m.level);
+      const moves = getDefaultMoves(spec, m.level);
+      const movePp: Record<string, number> = {};
+      moves.forEach(mId => {
+        if (MOVES[mId]) movePp[mId] = MOVES[mId].maxPp;
+      });
+      return {
+        id: `gym-${leader.id}-${idx}`,
+        speciesId: spec.id,
+        nickname: m.nickname,
+        level: m.level,
+        xp: 0,
+        currentHp: maxHp,
+        maxHp,
+        moves,
+        movePp,
+        status: null,
+        partySlot: idx
+      };
+    });
+
+    this.time.delayedCall(450, () => {
+      this.scene.start('BattleScene', {
+        playerParty,
+        isTrainerBattle: true,
+        trainerName: leader.name,
+        trainerParty: gymTeam,
+        badgeReward: {
+          id: leader.badgeId,
+          name: leader.badgeName,
+          leader: leader.name
+        },
+        returnScene: 'OverworldScene',
+        returnTile: { ...this.playerTile }
+      });
+    });
   }
 
   private showChampionPrompt() {
     if (this.championPromptContainer) return;
 
+    let badges: Record<string, any> = {};
+    try {
+      const raw = localStorage.getItem('monster_proto_badges');
+      if (raw) badges = JSON.parse(raw);
+    } catch {}
+
+    const missingBadges = REQUIRED_BADGES_FOR_CHAMPION.filter(bId => !badges[bId]);
+    const isUnlocked = missingBadges.length === 0;
+
     this.championPromptContainer = this.add.container(240, 160).setScrollFactor(0).setDepth(300);
 
-    const bg = this.add.rectangle(0, 0, 320, 140, 0x0f172a, 0.95).setStrokeStyle(2, 0xf59e0b);
-    const title = this.add.text(0, -45, '👑 DOJO CHAMPION AARON', {
+    const bg = this.add.rectangle(0, 0, 330, 160, 0x0f172a, 0.96).setStrokeStyle(2, 0xf59e0b);
+    const title = this.add.text(0, -52, '👑 DOJO CHAMPION AARON', {
       fontSize: '13px',
       color: '#f59e0b',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    const desc = this.add.text(0, -15, '"I am Master Aaron! Prove your worth\nin an ultimate 3v3 Champion Battle!"', {
-      fontSize: '10px',
-      color: '#f8fafc',
-      align: 'center'
-    }).setOrigin(0.5);
+    if (!isUnlocked) {
+      const missingNames = missingBadges.map(b => BADGES[b].name).join(', ');
+      const desc = this.add.text(
+        0,
+        -10,
+        `"Halt, traveler! The Grand Pagoda Dojo is strictly reserved for those who have mastered all regions.\n\nYou have earned ${4 - missingBadges.length} of 4 required badges.\nMissing: ${missingNames}.\n\nDefeat the 4 Regional Leaders first before facing the Champion!"`,
+        {
+          fontSize: '9.5px',
+          color: '#fca5a5',
+          align: 'center',
+          wordWrap: { width: 300 }
+        }
+      ).setOrigin(0.5);
 
-    const challengeBtn = this.add.rectangle(-65, 35, 120, 30, 0xd97706)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.startChampionBattle());
+      const leaveBtn = this.add.rectangle(0, 52, 100, 28, 0x475569)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.championPromptContainer?.destroy();
+          this.championPromptContainer = undefined;
+        });
 
-    const challengeTxt = this.add.text(-65, 35, '⚔️ Challenge (3v3)', {
-      fontSize: '10px',
-      color: '#fff',
-      fontStyle: 'bold'
-    }).setOrigin(0.5);
+      const leaveTxt = this.add.text(0, 52, 'Understood', {
+        fontSize: '10px',
+        color: '#fff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
 
-    const leaveBtn = this.add.rectangle(75, 35, 90, 30, 0x475569)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        this.championPromptContainer?.destroy();
-        this.championPromptContainer = undefined;
-      });
+      this.championPromptContainer.add([bg, title, desc, leaveBtn, leaveTxt]);
+    } else {
+      const desc = this.add.text(
+        0,
+        -10,
+        `"Magnificent! You carry all 4 Regional Badges: Meadow, Azure, Grove, and Magma!\n\nStep forward and face my supreme 3v3 Apex team for the Crown!"`,
+        {
+          fontSize: '10px',
+          color: '#f8fafc',
+          align: 'center',
+          wordWrap: { width: 300 }
+        }
+      ).setOrigin(0.5);
 
-    const leaveTxt = this.add.text(75, 35, 'Leave', {
-      fontSize: '10px',
-      color: '#fff'
-    }).setOrigin(0.5);
+      const challengeBtn = this.add.rectangle(-65, 52, 120, 28, 0xd97706)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => this.startChampionBattle());
 
-    this.championPromptContainer.add([bg, title, desc, challengeBtn, challengeTxt, leaveBtn, leaveTxt]);
+      const challengeTxt = this.add.text(-65, 52, '⚔️ Challenge (3v3)', {
+        fontSize: '10px',
+        color: '#fff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+
+      const leaveBtn = this.add.rectangle(75, 52, 90, 28, 0x475569)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.championPromptContainer?.destroy();
+          this.championPromptContainer = undefined;
+        });
+
+      const leaveTxt = this.add.text(75, 52, 'Leave', {
+        fontSize: '10px',
+        color: '#fff'
+      }).setOrigin(0.5);
+
+      this.championPromptContainer.add([bg, title, desc, challengeBtn, challengeTxt, leaveBtn, leaveTxt]);
+    }
   }
 
   private startChampionBattle() {
@@ -436,7 +658,7 @@ export class OverworldScene extends Phaser.Scene {
 
     const playerParty = this.getPlayerParty();
 
-    // 3v3 Stage-3 Champion Team
+    // 3v3 Stage-3 Champion Team with PP
     const championTeam: MonsterInstance[] = [
       {
         id: 'champ-1',
@@ -471,7 +693,13 @@ export class OverworldScene extends Phaser.Scene {
         moves: getDefaultMoves(getSpecies(9), 17),
         partySlot: 2
       }
-    ];
+    ].map(m => {
+      const movePp: Record<string, number> = {};
+      m.moves.forEach(mId => {
+        if (MOVES[mId]) movePp[mId] = MOVES[mId].maxPp;
+      });
+      return { ...m, movePp, status: null };
+    });
 
     this.time.delayedCall(450, () => {
       this.scene.start('BattleScene', {
@@ -479,6 +707,11 @@ export class OverworldScene extends Phaser.Scene {
         isTrainerBattle: true,
         trainerName: 'Master Aaron',
         trainerParty: championTeam,
+        badgeReward: {
+          id: 'crown',
+          name: 'Crown Badge',
+          leader: 'Grand Champion Aaron'
+        },
         returnScene: 'OverworldScene',
         returnTile: { ...this.playerTile }
       });

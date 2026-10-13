@@ -24,7 +24,8 @@ export const SaveStateSchema = z.object({
   championBeaten: z.number().int().min(0).max(1),
   party: z.array(SaveMonsterSchema).max(6),
   box: z.array(SaveMonsterSchema).max(30),
-  dex: z.record(z.string(), z.boolean()) // speciesId -> caught
+  dex: z.record(z.string(), z.boolean()), // speciesId -> caught
+  badges: z.record(z.string(), z.boolean()).optional()
 });
 
 export type SaveStatePayload = z.infer<typeof SaveStateSchema>;

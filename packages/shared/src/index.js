@@ -8,3 +8,4 @@ export * from './zones.js';
 export * from './protocol.js';
 export * from './multiplayerProtocol.js';
 export * from './items.js';
+export * from './gyms.js';

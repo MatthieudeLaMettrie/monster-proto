@@ -6,7 +6,8 @@ import {
   calculateMaxHp,
   ITEMS,
   DEFAULT_INVENTORY,
-  InventoryBag
+  InventoryBag,
+  BADGES
 } from '@monster-proto/shared';
 
 export interface PartySceneData {
@@ -19,7 +20,7 @@ export class PartyScene extends Phaser.Scene {
   private party: MonsterInstance[] = [];
   private dex: Record<string, boolean> = {};
   private returnScene = 'OverworldScene';
-  private currentTab: 'party' | 'bag' | 'dex' = 'party';
+  private currentTab: 'party' | 'bag' | 'dex' | 'badges' = 'party';
 
   private tabTexts: Record<string, Phaser.GameObjects.Text> = {};
 
@@ -38,8 +39,8 @@ export class PartyScene extends Phaser.Scene {
     this.add.rectangle(240, 160, 480, 320, 0x0f172a);
 
     // Header tabs
-    this.tabTexts['party'] = this.add.text(90, 25, '👥 Party', {
-      fontSize: '13px',
+    this.tabTexts['party'] = this.add.text(68, 25, '👥 Party', {
+      fontSize: '12px',
       color: '#38bdf8',
       fontStyle: 'bold'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
@@ -48,8 +49,8 @@ export class PartyScene extends Phaser.Scene {
       this.renderContent();
     });
 
-    this.tabTexts['bag'] = this.add.text(190, 25, '🎒 Bag', {
-      fontSize: '13px',
+    this.tabTexts['bag'] = this.add.text(155, 25, '🎒 Bag', {
+      fontSize: '12px',
       color: '#94a3b8',
       fontStyle: 'bold'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
@@ -58,8 +59,8 @@ export class PartyScene extends Phaser.Scene {
       this.renderContent();
     });
 
-    this.tabTexts['dex'] = this.add.text(290, 25, '📖 Pokedex', {
-      fontSize: '13px',
+    this.tabTexts['dex'] = this.add.text(248, 25, '📖 Pokedex', {
+      fontSize: '12px',
       color: '#94a3b8',
       fontStyle: 'bold'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
@@ -68,8 +69,18 @@ export class PartyScene extends Phaser.Scene {
       this.renderContent();
     });
 
+    this.tabTexts['badges'] = this.add.text(342, 25, '🏆 Badges', {
+      fontSize: '12px',
+      color: '#94a3b8',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      this.currentTab = 'badges';
+      this.updateTabStyles();
+      this.renderContent();
+    });
+
     // Close button
-    this.add.text(430, 25, '✖ Close', {
+    this.add.text(435, 25, '✖ Close', {
       fontSize: '12px',
       color: '#ef4444'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
@@ -106,8 +117,10 @@ export class PartyScene extends Phaser.Scene {
       this.renderParty();
     } else if (this.currentTab === 'bag') {
       this.renderBag();
-    } else {
+    } else if (this.currentTab === 'dex') {
       this.renderDex();
+    } else {
+      this.renderBadges();
     }
   }
 
@@ -261,5 +274,116 @@ export class PartyScene extends Phaser.Scene {
         color: caught ? '#fff' : '#94a3b8'
       }).setOrigin(0.5).setName('tab-content');
     });
+  }
+
+  private renderBadges() {
+    let badges: Record<string, { id: string; name: string; leader: string; acquiredAt?: string }> = {};
+    try {
+      const raw = localStorage.getItem('monster_proto_badges');
+      if (raw) badges = JSON.parse(raw);
+    } catch {}
+
+    const badgeKeys = Object.keys(BADGES);
+    const earnedCount = badgeKeys.filter(k => !!badges[k]).length;
+
+    // Header title
+    this.add.text(240, 52, `🏆 Regional League Badge Case (${earnedCount} / 5)`, {
+      fontSize: '13px',
+      color: '#f59e0b',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setName('tab-content');
+
+    // Velvet presentation case box
+    this.add.rectangle(240, 175, 440, 215, 0x0f172a)
+      .setStrokeStyle(2, 0xd97706)
+      .setName('tab-content');
+    this.add.rectangle(240, 175, 432, 207, 0x1b1c31)
+      .setName('tab-content');
+
+    // Row 1: The 4 Regional Badges
+    const regionalKeys = ['meadow', 'azure', 'grove', 'magma'];
+    const regSpacing = 100;
+    const startX = 90;
+    const row1Y = 125;
+
+    regionalKeys.forEach((key, idx) => {
+      const bDef = BADGES[key];
+      const earned = !!badges[key];
+      const x = startX + idx * regSpacing;
+      const y = row1Y;
+
+      // Card / pedestal
+      this.add.rectangle(x, y, 92, 90, earned ? 0x1e293b : 0x111827)
+        .setStrokeStyle(earned ? 2 : 1, earned ? bDef.color : 0x374151)
+        .setName('tab-content');
+
+      // Emblem circle
+      this.add.circle(x, y - 18, 18, earned ? bDef.color : 0x1f2937)
+        .setStrokeStyle(earned ? 2 : 1, earned ? 0xfef08a : 0x4b5563)
+        .setName('tab-content');
+
+      // Icon
+      this.add.text(x, y - 18, earned ? bDef.icon : '🔒', {
+        fontSize: earned ? '16px' : '12px'
+      }).setOrigin(0.5).setName('tab-content');
+
+      // Badge name
+      this.add.text(x, y + 8, earned ? bDef.name : 'Locked', {
+        fontSize: '9px',
+        color: earned ? '#f8fafc' : '#64748b',
+        fontStyle: 'bold'
+      }).setOrigin(0.5).setName('tab-content');
+
+      // Leader name
+      this.add.text(x, y + 21, bDef.leader, {
+        fontSize: '7.5px',
+        color: earned ? '#38bdf8' : '#475569'
+      }).setOrigin(0.5).setName('tab-content');
+
+      // Status date / hint
+      this.add.text(x, y + 33, earned ? (badges[key].acquiredAt || 'Earned!') : 'Unbeaten', {
+        fontSize: '7px',
+        color: earned ? '#4ade80' : '#ef4444'
+      }).setOrigin(0.5).setName('tab-content');
+    });
+
+    // Row 2: Grand Champion Dojo Crown Badge
+    const crownDef = BADGES['crown'];
+    const crownEarned = !!badges['crown'];
+    const crownX = 240;
+    const crownY = 228;
+
+    this.add.rectangle(crownX, crownY, 260, 68, crownEarned ? 0x2e1065 : 0x111827)
+      .setStrokeStyle(crownEarned ? 2 : 1, crownEarned ? 0xf59e0b : 0x374151)
+      .setName('tab-content');
+
+    this.add.circle(crownX - 95, crownY, 22, crownEarned ? 0xf59e0b : 0x1f2937)
+      .setStrokeStyle(crownEarned ? 2 : 1, crownEarned ? 0xfef08a : 0x4b5563)
+      .setName('tab-content');
+
+    this.add.text(crownX - 95, crownY, crownEarned ? crownDef.icon : '🔒', {
+      fontSize: crownEarned ? '18px' : '14px'
+    }).setOrigin(0.5).setName('tab-content');
+
+    this.add.text(crownX - 60, crownY - 18, crownEarned ? crownDef.name : '👑 Supreme Crown Badge (Locked)', {
+      fontSize: '10px',
+      color: crownEarned ? '#fbbf24' : '#64748b',
+      fontStyle: 'bold'
+    }).setOrigin(0, 0.5).setName('tab-content');
+
+    this.add.text(crownX - 60, crownY - 4, `${crownDef.leader} • Grand Pagoda Dojo`, {
+      fontSize: '8px',
+      color: crownEarned ? '#c084fc' : '#475569'
+    }).setOrigin(0, 0.5).setName('tab-content');
+
+    const crownStatus = crownEarned
+      ? `★ GRAND REGIONAL CHAMPION ★ (${badges['crown'].acquiredAt || 'Earned'})`
+      : 'Requires all 4 Regional Badges to challenge Aaron';
+
+    this.add.text(crownX - 60, crownY + 12, crownStatus, {
+      fontSize: '7.5px',
+      color: crownEarned ? '#4ade80' : '#ef4444',
+      fontStyle: crownEarned ? 'bold' : 'normal'
+    }).setOrigin(0, 0.5).setName('tab-content');
   }
 }

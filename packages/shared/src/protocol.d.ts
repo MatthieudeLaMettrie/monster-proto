@@ -160,6 +160,7 @@ export declare const SaveStateSchema: z.ZodObject<{
         partySlot?: number | null | undefined;
     }>, "many">;
     dex: z.ZodRecord<z.ZodString, z.ZodBoolean>;
+    badges: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodBoolean>>;
 }, "strip", z.ZodTypeAny, {
     posX: number;
     posY: number;
@@ -197,6 +198,7 @@ export declare const SaveStateSchema: z.ZodObject<{
         partySlot?: number | null | undefined;
     }[];
     dex: Record<string, boolean>;
+    badges?: Record<string, boolean> | undefined;
 }, {
     posX: number;
     posY: number;
@@ -234,5 +236,6 @@ export declare const SaveStateSchema: z.ZodObject<{
         partySlot?: number | null | undefined;
     }[];
     dex: Record<string, boolean>;
+    badges?: Record<string, boolean> | undefined;
 }>;
 export type SaveStatePayload = z.infer<typeof SaveStateSchema>;

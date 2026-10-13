@@ -31,6 +31,11 @@ export interface BattleInitData {
   isTrainerBattle?: boolean;
   trainerName?: string;
   trainerParty?: MonsterInstance[];
+  badgeReward?: {
+    id: string;
+    name: string;
+    leader?: string;
+  };
 }
 
 export class BattleScene extends Phaser.Scene {
@@ -44,6 +49,11 @@ export class BattleScene extends Phaser.Scene {
   private trainerName = 'Trainer';
   private trainerParty: MonsterInstance[] = [];
   private activeTrainerIdx = 0;
+  private badgeReward?: {
+    id: string;
+    name: string;
+    leader?: string;
+  };
 
   private playerSprite!: Phaser.GameObjects.Image;
   private enemySprite!: Phaser.GameObjects.Image;
@@ -122,6 +132,7 @@ export class BattleScene extends Phaser.Scene {
     this.returnTile = data.returnTile;
     this.isTrainerBattle = !!data.isTrainerBattle;
     this.trainerName = data.trainerName || 'Master Aaron';
+    this.badgeReward = data.badgeReward;
     this.activeTrainerIdx = 0;
 
     let party = (data.playerParty && Array.isArray(data.playerParty) && data.playerParty.length > 0)
@@ -1080,11 +1091,31 @@ export class BattleScene extends Phaser.Scene {
       } else {
         // Trainer defeated completely!
         Sound.playCatchSuccess();
-        this.dialogueText.setText(`Congratulations! You defeated Master Aaron and became the Champion!`);
-        try {
-          localStorage.setItem('monster_proto_champion', '1');
-        } catch {}
-        this.time.delayedCall(2500, () => this.endBattle(true));
+        if (this.badgeReward) {
+          try {
+            const rawBadges = localStorage.getItem('monster_proto_badges');
+            const badges = rawBadges ? JSON.parse(rawBadges) : {};
+            badges[this.badgeReward.id] = {
+              id: this.badgeReward.id,
+              name: this.badgeReward.name,
+              leader: this.badgeReward.leader || this.trainerName,
+              acquiredAt: new Date().toLocaleDateString()
+            };
+            localStorage.setItem('monster_proto_badges', JSON.stringify(badges));
+          } catch {}
+
+          if (this.badgeReward.id === 'crown') {
+            try {
+              localStorage.setItem('monster_proto_champion', '1');
+            } catch {}
+            this.dialogueText.setText(`Victory! Defeated ${this.trainerName} & earned the ${this.badgeReward.name}! You are the Champion!`);
+          } else {
+            this.dialogueText.setText(`Victory! Defeated ${this.trainerName} & earned the ${this.badgeReward.name}!`);
+          }
+        } else {
+          this.dialogueText.setText(`Congratulations! You defeated ${this.trainerName}!`);
+        }
+        this.time.delayedCall(2800, () => this.endBattle(true));
         return;
       }
     }
