@@ -6,6 +6,7 @@ import {
   MonsterInstance,
   calculateMaxHp,
   getDefaultMoves,
+  MOVES,
   ITEMS,
   DEFAULT_INVENTORY,
   InventoryBag,
@@ -1204,12 +1205,36 @@ export class OverworldScene extends Phaser.Scene {
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((m: any, idx: number) => {
+            const spec = getSpecies(m.speciesId || 1);
+            const lvl = Math.max(1, m.level || 5);
+            const maxHp = m.maxHp || calculateMaxHp(spec.baseStats.hp, lvl);
+            const moves = Array.isArray(m.moves) && m.moves.length > 0 ? m.moves : getDefaultMoves(spec, lvl);
+            const movePp: Record<string, number> = { ...(m.movePp || {}) };
+            moves.forEach((mId: string) => {
+              if (typeof movePp[mId] !== 'number' && MOVES[mId]) {
+                movePp[mId] = MOVES[mId].maxPp;
+              }
+            });
+            return {
+              ...m,
+              moves,
+              movePp,
+              status: m.status || null,
+              partySlot: idx
+            };
+          });
         }
       } catch {}
     }
     const starterSpecies = getSpecies(1);
     const maxHp = calculateMaxHp(starterSpecies.baseStats.hp, 5);
+    const starterMoves = ['tackle', 'ember_nip'];
+    const starterPp: Record<string, number> = {};
+    starterMoves.forEach(mId => {
+      if (MOVES[mId]) starterPp[mId] = MOVES[mId].maxPp;
+    });
+
     const starter: MonsterInstance = {
       id: 'starter-1',
       speciesId: 1,
@@ -1218,7 +1243,9 @@ export class OverworldScene extends Phaser.Scene {
       xp: 0,
       currentHp: maxHp,
       maxHp,
-      moves: ['tackle', 'ember_nip'],
+      moves: starterMoves,
+      movePp: starterPp,
+      status: null,
       partySlot: 0
     };
     try {
@@ -1231,13 +1258,18 @@ export class OverworldScene extends Phaser.Scene {
     const party = this.getPlayerParty();
     party.forEach((mon) => {
       mon.currentHp = mon.maxHp;
+      mon.status = null;
+      if (!mon.movePp) mon.movePp = {};
+      mon.moves.forEach((mId) => {
+        if (MOVES[mId]) mon.movePp![mId] = MOVES[mId].maxPp;
+      });
     });
     try {
       localStorage.setItem('monster_proto_party', JSON.stringify(party));
     } catch {}
     Sound.playRevitalize();
     if (this.logText && this.logText.active) {
-      this.logText.setText('💖 Revitalized! All team members restored to full HP!');
+      this.logText.setText('💖 Revitalized! HP, PP, and Status completely restored!');
     }
     if (this.cameras?.main) {
       this.cameras.main.flash(300, 50, 205, 50);
@@ -1245,7 +1277,7 @@ export class OverworldScene extends Phaser.Scene {
 
     const toast = document.getElementById('save-toast');
     if (toast) {
-      toast.innerText = '💖 Team Revitalized to Full HP!';
+      toast.innerText = '💖 Team Revitalized: Full HP, PP & Status!';
       toast.style.background = '#0284c7';
       toast.style.opacity = '1';
       setTimeout(() => (toast.style.opacity = '0'), 1800);

@@ -24,6 +24,11 @@ export interface Move {
     power: number;
     accuracy: number;
 }
+export type StatusCondition = 'burn' | 'poison' | 'paralysis' | 'sleep' | 'freeze';
+export interface MonsterStatus {
+    condition: StatusCondition;
+    sleepTurnsLeft?: number;
+}
 export interface MonsterInstance {
     id: string;
     speciesId: number;
@@ -33,5 +38,7 @@ export interface MonsterInstance {
     currentHp: number;
     maxHp: number;
     moves: string[];
+    movePp?: Record<string, number>;
+    status?: MonsterStatus | null;
     partySlot?: number | null;
 }

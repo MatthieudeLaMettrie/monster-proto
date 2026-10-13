@@ -22,11 +22,14 @@ export function calculateXpReward(baseXp, enemyLevel) {
 }
 // Catch probability calculation
 // stageCatch: stage 1 = 0.6, stage 2 = 0.3
-// catchChance = clamp(stageCatch * (1 - 0.7 * currentHp / maxHp), 0.05, 0.95)
-export function calculateCatchChance(stage, currentHp, maxHp) {
+// catchChance = clamp(stageCatch * (1 - 0.7 * currentHp / maxHp) * (hasStatus ? 1.5 : 1), 0.05, 0.95)
+export function calculateCatchChance(stage, currentHp, maxHp, hasStatus = false) {
     const stageCatch = stage === 1 ? 0.6 : 0.3;
     const hpRatio = Math.max(0, Math.min(1, currentHp / maxHp));
-    const chance = stageCatch * (1.0 - 0.7 * hpRatio);
+    let chance = stageCatch * (1.0 - 0.7 * hpRatio);
+    if (hasStatus) {
+        chance *= 1.5;
+    }
     return Math.max(0.05, Math.min(0.95, chance));
 }
 // Get standard default moves for a species at a given level

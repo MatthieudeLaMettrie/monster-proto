@@ -12,7 +12,11 @@ import {
   getDefaultMoves,
   ITEMS,
   DEFAULT_INVENTORY,
-  InventoryBag
+  InventoryBag,
+  canAct,
+  calculateStatusResidual,
+  rollStatusProc,
+  MonsterStatus
 } from '@monster-proto/shared';
 import { Sound } from './SoundManager.js';
 import { PersistenceManager } from './persistence.js';
@@ -51,6 +55,8 @@ export class BattleScene extends Phaser.Scene {
   private enemyHpText!: Phaser.GameObjects.Text;
   private enemyNameText!: Phaser.GameObjects.Text;
   private playerNameText!: Phaser.GameObjects.Text;
+  private playerStatusBadge!: Phaser.GameObjects.Text;
+  private enemyStatusBadge!: Phaser.GameObjects.Text;
 
   private dialogueText!: Phaser.GameObjects.Text;
   private menuContainer!: Phaser.GameObjects.Container;
@@ -127,6 +133,14 @@ export class BattleScene extends Phaser.Scene {
       const spec = getSpecies(m.speciesId || 1);
       const lvl = Math.max(1, m.level || 5);
       const maxHp = m.maxHp || calculateMaxHp(spec.baseStats.hp, lvl);
+      const moves = Array.isArray(m.moves) && m.moves.length > 0 ? m.moves : getDefaultMoves(spec, lvl);
+      const movePp: Record<string, number> = { ...(m.movePp || {}) };
+      moves.forEach((mId) => {
+        if (typeof movePp[mId] !== 'number' && MOVES[mId]) {
+          movePp[mId] = MOVES[mId].maxPp;
+        }
+      });
+
       return {
         id: m.id || `mon-${idx}-${Date.now()}`,
         speciesId: spec.id,
@@ -135,7 +149,9 @@ export class BattleScene extends Phaser.Scene {
         xp: m.xp || 0,
         currentHp: typeof m.currentHp === 'number' ? m.currentHp : maxHp,
         maxHp,
-        moves: Array.isArray(m.moves) && m.moves.length > 0 ? m.moves : getDefaultMoves(spec, lvl),
+        moves,
+        movePp,
+        status: m.status || null,
         partySlot: idx
       };
     });
@@ -156,6 +172,12 @@ export class BattleScene extends Phaser.Scene {
       const wildLvl = Math.max(1, data.wildLevel || 3);
       const enemySpecies = getSpecies(wildId);
       const maxHp = calculateMaxHp(enemySpecies.baseStats.hp, wildLvl);
+      const enemyMoves = getDefaultMoves(enemySpecies, wildLvl);
+      const enemyPp: Record<string, number> = {};
+      enemyMoves.forEach(mId => {
+        if (MOVES[mId]) enemyPp[mId] = MOVES[mId].maxPp;
+      });
+
       this.wildMonster = {
         id: 'wild-' + Date.now(),
         speciesId: enemySpecies.id,
@@ -164,8 +186,17 @@ export class BattleScene extends Phaser.Scene {
         xp: 0,
         currentHp: maxHp,
         maxHp,
-        moves: getDefaultMoves(enemySpecies, wildLvl)
+        moves: enemyMoves,
+        movePp: enemyPp,
+        status: null
       };
+    }
+
+    if (!this.wildMonster.movePp) {
+      this.wildMonster.movePp = {};
+      this.wildMonster.moves.forEach(mId => {
+        if (MOVES[mId]) this.wildMonster.movePp![mId] = MOVES[mId].maxPp;
+      });
     }
   }
 
@@ -254,6 +285,12 @@ export class BattleScene extends Phaser.Scene {
       color: '#fff',
       fontStyle: 'bold'
     });
+    this.enemyStatusBadge = this.add.text(180, 29, '', {
+      fontSize: '9px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      padding: { x: 3, y: 1 }
+    }).setOrigin(0, 0);
     this.enemyHpBar = this.add.graphics();
     this.enemyHpText = this.add.text(175, 48, '', { fontSize: '10px', color: '#cbd5e1' });
 
@@ -264,6 +301,12 @@ export class BattleScene extends Phaser.Scene {
       color: '#fff',
       fontStyle: 'bold'
     });
+    this.playerStatusBadge = this.add.text(400, 157, '', {
+      fontSize: '9px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      padding: { x: 3, y: 1 }
+    }).setOrigin(0, 0);
     this.playerHpBar = this.add.graphics();
     this.playerHpText = this.add.text(395, 178, '', { fontSize: '10px', color: '#cbd5e1' });
 
@@ -325,24 +368,32 @@ export class BattleScene extends Phaser.Scene {
   private rebuildMovesMenu() {
     this.movesContainer.removeAll(true);
     const activePlayer = this.playerParty[this.activePlayerIdx];
+    if (!activePlayer.movePp) activePlayer.movePp = {};
 
     activePlayer.moves.forEach((moveId, i) => {
       const move = MOVES[moveId];
       if (!move) return;
+
+      const maxPp = move.maxPp || 35;
+      const currentPp = activePlayer.movePp![moveId] ?? maxPp;
+      activePlayer.movePp![moveId] = currentPp;
 
       const col = i % 2;
       const row = Math.floor(i / 2);
       const x = -110 + col * 220;
       const y = -15 + row * 32;
 
-      const rect = this.add.rectangle(x, y, 190, 28, 0x1e293b)
-        .setStrokeStyle(1, 0x64748b)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => this.executeTurn(moveId));
+      const hasPp = currentPp > 0;
+      const rect = this.add.rectangle(x, y, 190, 28, hasPp ? 0x1e293b : 0x0f172a)
+        .setStrokeStyle(1, hasPp ? 0x3b82f6 : 0x475569)
+        .setInteractive({ useHandCursor: hasPp })
+        .on('pointerdown', () => {
+          if (hasPp) this.executeTurn(moveId);
+        });
 
-      const label = this.add.text(x - 85, y - 7, `${move.name} (${move.type})`, {
-        fontSize: '11px',
-        color: '#f8fafc',
+      const label = this.add.text(x - 85, y - 7, `${move.name} (${currentPp}/${maxPp} PP)`, {
+        fontSize: '10px',
+        color: hasPp ? '#f8fafc' : '#64748b',
         fontStyle: 'bold'
       });
 
@@ -496,6 +547,30 @@ export class BattleScene extends Phaser.Scene {
       });
       return;
     }
+
+    if (item.category === 'status_cure') {
+      if (!activePlayer.status || (item.curesCondition && item.curesCondition !== 'all' && activePlayer.status.condition !== item.curesCondition)) {
+        this.dialogueText.setText(`It won't have any effect on ${activePlayer.nickname}!`);
+        this.time.delayedCall(1000, () => {
+          this.isActing = false;
+          this.showBagMenu();
+        });
+        return;
+      }
+
+      inventory[itemId]--;
+      this.saveInventory(inventory);
+      const curedCondition = activePlayer.status.condition;
+      activePlayer.status = null;
+      Sound.playRevitalize();
+      this.updateHpBars();
+      this.dialogueText.setText(`Used ${item.name}! ${activePlayer.nickname} was cured of ${curedCondition}!`);
+
+      this.time.delayedCall(1200, () => {
+        this.enemyRetaliateTurn();
+      });
+      return;
+    }
   }
 
   // --- Switch Menu System ---
@@ -596,19 +671,44 @@ export class BattleScene extends Phaser.Scene {
     const enemySpecies = getSpecies(this.wildMonster.speciesId);
     const activePlayer = this.playerParty[this.activePlayerIdx];
     const playerSpecies = getSpecies(activePlayer.speciesId);
-    const enemyMove = MOVES[Phaser.Utils.Array.GetRandom(this.wildMonster.moves)] || MOVES['tackle'];
+
+    // Check status condition action prevention (Sleep, Freeze, Paralysis)
+    const statusCheck = canAct(this.wildMonster.status);
+    if (statusCheck.statusUpdate !== undefined) {
+      this.wildMonster.status = statusCheck.statusUpdate;
+      this.updateStatusBadges();
+    }
+
+    if (!statusCheck.canAct) {
+      this.dialogueText.setText(`${this.wildMonster.nickname} ${statusCheck.reason}`);
+      Sound.playHit(false);
+      this.time.delayedCall(1200, () => {
+        this.applyEndTurnResiduals();
+      });
+      return;
+    }
+
+    const enemyAvailableMoves = this.wildMonster.moves.filter(m => (this.wildMonster.movePp?.[m] ?? 1) > 0);
+    const enemyMoveId = enemyAvailableMoves.length > 0 ? Phaser.Utils.Array.GetRandom(enemyAvailableMoves) : 'tackle';
+    const enemyMove = MOVES[enemyMoveId] || MOVES['tackle'];
+    if (this.wildMonster.movePp) {
+      this.wildMonster.movePp[enemyMoveId] = Math.max(0, (this.wildMonster.movePp[enemyMoveId] ?? enemyMove.maxPp) - 1);
+    }
 
     const ctx = {
       attackerLevel: this.wildMonster.level,
       attackerAtk: calculateStat(enemySpecies.baseStats.atk, this.wildMonster.level),
       attackerType: enemySpecies.type,
+      attackerStatus: this.wildMonster.status,
       defenderDef: calculateStat(playerSpecies.baseStats.def, activePlayer.level),
       defenderType: playerSpecies.type,
       move: enemyMove
     };
 
     const res = calculateDamage(ctx);
-    this.dialogueText.setText(`${this.wildMonster.nickname} used ${enemyMove.name}!`);
+    let introText = statusCheck.reason ? `${this.wildMonster.nickname} ${statusCheck.reason} ` : '';
+    introText += `${this.wildMonster.nickname} used ${enemyMove.name}!`;
+    this.dialogueText.setText(introText);
 
     this.tweens.add({
       targets: this.enemySprite,
@@ -621,15 +721,62 @@ export class BattleScene extends Phaser.Scene {
           activePlayer.currentHp = Math.max(0, activePlayer.currentHp - res.damage);
           this.cameras.main.shake(100, 0.005);
           this.updateHpBars();
-          this.dialogueText.setText(`${this.wildMonster.nickname} dealt ${res.damage} damage!`);
+
+          let note = '';
+          if (res.typeMultiplier > 1.0) note = " It's super effective!";
+          else if (res.typeMultiplier < 1.0) note = " It's not very effective...";
+
+          const newStatus = rollStatusProc(enemyMove, activePlayer.status);
+          if (newStatus && activePlayer.currentHp > 0) {
+            activePlayer.status = newStatus;
+            this.updateStatusBadges();
+            const condName = newStatus.condition === 'burn' ? 'burned'
+              : newStatus.condition === 'poison' ? 'poisoned'
+              : newStatus.condition === 'paralysis' ? 'paralyzed'
+              : newStatus.condition === 'freeze' ? 'frozen solid'
+              : 'put to sleep';
+            note += ` ${activePlayer.nickname} was ${condName}!`;
+          }
+
+          this.dialogueText.setText(`${this.wildMonster.nickname} dealt ${res.damage} damage!${note}`);
         } else {
           this.dialogueText.setText(`${this.wildMonster.nickname}'s attack missed!`);
         }
-        this.time.delayedCall(1000, () => {
-          this.checkTurnEnd();
+        this.time.delayedCall(1100, () => {
+          this.applyEndTurnResiduals();
         });
       }
     });
+  }
+
+  private updateStatusBadges() {
+    const activePlayer = this.playerParty[this.activePlayerIdx];
+
+    const getBadgeInfo = (status?: MonsterStatus | null) => {
+      if (!status) return { text: '', bg: '' };
+      switch (status.condition) {
+        case 'burn': return { text: ' BRN ', bg: '#ea580c' };
+        case 'poison': return { text: ' PSN ', bg: '#9333ea' };
+        case 'paralysis': return { text: ' PAR ', bg: '#ca8a04' };
+        case 'sleep': return { text: ' SLP ', bg: '#2563eb' };
+        case 'freeze': return { text: ' FRZ ', bg: '#0891b2' };
+        default: return { text: '', bg: '' };
+      }
+    };
+
+    if (this.playerStatusBadge) {
+      const p = getBadgeInfo(activePlayer?.status);
+      this.playerStatusBadge.setText(p.text);
+      if (p.bg) this.playerStatusBadge.setBackgroundColor(p.bg);
+      this.playerStatusBadge.setVisible(Boolean(p.text));
+    }
+
+    if (this.enemyStatusBadge) {
+      const e = getBadgeInfo(this.wildMonster?.status);
+      this.enemyStatusBadge.setText(e.text);
+      if (e.bg) this.enemyStatusBadge.setBackgroundColor(e.bg);
+      this.enemyStatusBadge.setVisible(Boolean(e.text));
+    }
   }
 
   private updateHpBars() {
@@ -654,6 +801,8 @@ export class BattleScene extends Phaser.Scene {
     this.playerHpBar.fillStyle(playerColor, 1);
     this.playerHpBar.fillRect(260, 178, 120 * playerRatio, 7);
     this.playerHpText.setText(`${activePlayer.currentHp}/${activePlayer.maxHp}`);
+
+    this.updateStatusBadges();
   }
 
   private executeTurn(playerMoveId: string) {
@@ -666,14 +815,26 @@ export class BattleScene extends Phaser.Scene {
     const enemySpecies = getSpecies(this.wildMonster.speciesId);
 
     const playerMove = MOVES[playerMoveId] || MOVES['tackle'];
-    const enemyMoveId = Phaser.Utils.Array.GetRandom(this.wildMonster.moves) || 'tackle';
+    if (activePlayer.movePp) {
+      activePlayer.movePp[playerMoveId] = Math.max(0, (activePlayer.movePp[playerMoveId] ?? playerMove.maxPp) - 1);
+    }
+
+    // Pick enemy move with available PP (or fallback to tackle)
+    const enemyAvailableMoves = this.wildMonster.moves.filter(m => (this.wildMonster.movePp?.[m] ?? 1) > 0);
+    const enemyMoveId = enemyAvailableMoves.length > 0 ? Phaser.Utils.Array.GetRandom(enemyAvailableMoves) : 'tackle';
     const enemyMove = MOVES[enemyMoveId] || MOVES['tackle'];
+    if (this.wildMonster.movePp) {
+      this.wildMonster.movePp[enemyMoveId] = Math.max(0, (this.wildMonster.movePp[enemyMoveId] ?? enemyMove.maxPp) - 1);
+    }
 
-    // Speed calculation
-    const playerSpd = calculateStat(playerSpecies.baseStats.spd, activePlayer.level);
-    const enemySpd = calculateStat(enemySpecies.baseStats.spd, this.wildMonster.level);
+    // Speed calculation with Paralysis speed halving
+    let playerSpd = calculateStat(playerSpecies.baseStats.spd, activePlayer.level);
+    if (activePlayer.status?.condition === 'paralysis') playerSpd = Math.floor(playerSpd * 0.5);
+
+    let enemySpd = calculateStat(enemySpecies.baseStats.spd, this.wildMonster.level);
+    if (this.wildMonster.status?.condition === 'paralysis') enemySpd = Math.floor(enemySpd * 0.5);
+
     const playerFirst = playerSpd >= enemySpd;
-
     const firstAttacker = playerFirst ? 'player' : 'enemy';
 
     this.runAttackStep(firstAttacker, playerMove, enemyMove, () => {
@@ -681,7 +842,7 @@ export class BattleScene extends Phaser.Scene {
       if (this.wildMonster.currentHp > 0 && activePlayer.currentHp > 0) {
         const secondAttacker = playerFirst ? 'enemy' : 'player';
         this.runAttackStep(secondAttacker, playerMove, enemyMove, () => {
-          this.checkTurnEnd();
+          this.applyEndTurnResiduals();
         });
       } else {
         this.checkTurnEnd();
@@ -694,71 +855,108 @@ export class BattleScene extends Phaser.Scene {
     const playerSpecies = getSpecies(activePlayer.speciesId);
     const enemySpecies = getSpecies(this.wildMonster.speciesId);
 
-    if (attacker === 'player') {
-      const ctx = {
-        attackerLevel: activePlayer.level,
-        attackerAtk: calculateStat(playerSpecies.baseStats.atk, activePlayer.level),
-        attackerType: playerSpecies.type,
-        defenderDef: calculateStat(enemySpecies.baseStats.def, this.wildMonster.level),
-        defenderType: enemySpecies.type,
-        move: playerMove
-      };
+    const isPlayer = attacker === 'player';
+    const attackingMon = isPlayer ? activePlayer : this.wildMonster;
+    const defendingMon = isPlayer ? this.wildMonster : activePlayer;
+    const move = isPlayer ? playerMove : enemyMove;
+    const sprite = isPlayer ? this.playerSprite : this.enemySprite;
 
-      const res = calculateDamage(ctx);
-      this.dialogueText.setText(`${activePlayer.nickname} used ${playerMove.name}!`);
+    // Check status condition action prevention (Sleep, Freeze, Paralysis)
+    const statusCheck = canAct(attackingMon.status);
+    if (statusCheck.statusUpdate !== undefined) {
+      attackingMon.status = statusCheck.statusUpdate;
+      this.updateStatusBadges();
+    }
 
-      this.tweens.add({
-        targets: this.playerSprite,
-        x: '+=20',
-        duration: 90,
-        yoyo: true,
-        onComplete: () => {
-          if (res.hit) {
-            Sound.playHit(res.typeMultiplier > 1);
-            this.wildMonster.currentHp = Math.max(0, this.wildMonster.currentHp - res.damage);
-            this.cameras.main.shake(100, 0.005);
-            this.updateHpBars();
-            let note = '';
-            if (res.typeMultiplier > 1.0) note = " It's super effective!";
-            else if (res.typeMultiplier < 1.0) note = " It's not very effective...";
-            this.dialogueText.setText(`${activePlayer.nickname} dealt ${res.damage} damage!${note}`);
-          } else {
-            this.dialogueText.setText(`${activePlayer.nickname}'s attack missed!`);
+    if (!statusCheck.canAct) {
+      this.dialogueText.setText(`${attackingMon.nickname} ${statusCheck.reason}`);
+      Sound.playHit(false);
+      this.time.delayedCall(1200, next);
+      return;
+    }
+
+    const ctx = {
+      attackerLevel: attackingMon.level,
+      attackerAtk: calculateStat(isPlayer ? playerSpecies.baseStats.atk : enemySpecies.baseStats.atk, attackingMon.level),
+      attackerType: isPlayer ? playerSpecies.type : enemySpecies.type,
+      attackerStatus: attackingMon.status,
+      defenderDef: calculateStat(isPlayer ? enemySpecies.baseStats.def : playerSpecies.baseStats.def, defendingMon.level),
+      defenderType: isPlayer ? enemySpecies.type : playerSpecies.type,
+      move
+    };
+
+    const res = calculateDamage(ctx);
+    let introText = statusCheck.reason ? `${attackingMon.nickname} ${statusCheck.reason} ` : '';
+    introText += `${attackingMon.nickname} used ${move.name}!`;
+    this.dialogueText.setText(introText);
+
+    this.tweens.add({
+      targets: sprite,
+      x: isPlayer ? '+=20' : '-=20',
+      duration: 90,
+      yoyo: true,
+      onComplete: () => {
+        if (res.hit) {
+          Sound.playHit(res.typeMultiplier > 1);
+          defendingMon.currentHp = Math.max(0, defendingMon.currentHp - res.damage);
+          this.cameras.main.shake(100, 0.005);
+          this.updateHpBars();
+
+          let note = '';
+          if (res.typeMultiplier > 1.0) note = " It's super effective!";
+          else if (res.typeMultiplier < 1.0) note = " It's not very effective...";
+
+          // Roll status proc
+          const newStatus = rollStatusProc(move, defendingMon.status);
+          if (newStatus && defendingMon.currentHp > 0) {
+            defendingMon.status = newStatus;
+            this.updateStatusBadges();
+            const condName = newStatus.condition === 'burn' ? 'burned'
+              : newStatus.condition === 'poison' ? 'poisoned'
+              : newStatus.condition === 'paralysis' ? 'paralyzed'
+              : newStatus.condition === 'freeze' ? 'frozen solid'
+              : 'put to sleep';
+            note += ` ${defendingMon.nickname} was ${condName}!`;
           }
-          this.time.delayedCall(1000, next);
+
+          this.dialogueText.setText(`${attackingMon.nickname} dealt ${res.damage} damage!${note}`);
+        } else {
+          this.dialogueText.setText(`${attackingMon.nickname}'s attack missed!`);
         }
-      });
+        this.time.delayedCall(1100, next);
+      }
+    });
+  }
+
+  private applyEndTurnResiduals() {
+    const activePlayer = this.playerParty[this.activePlayerIdx];
+
+    const playerRes = calculateStatusResidual(activePlayer.status, activePlayer.maxHp);
+    const enemyRes = calculateStatusResidual(this.wildMonster.status, this.wildMonster.maxHp);
+
+    if (playerRes.damage > 0 || enemyRes.damage > 0) {
+      if (playerRes.damage > 0 && activePlayer.currentHp > 0) {
+        activePlayer.currentHp = Math.max(0, activePlayer.currentHp - playerRes.damage);
+        this.updateHpBars();
+        this.dialogueText.setText(`${activePlayer.nickname} ${playerRes.reason}`);
+      }
+
+      if (enemyRes.damage > 0 && this.wildMonster.currentHp > 0) {
+        this.wildMonster.currentHp = Math.max(0, this.wildMonster.currentHp - enemyRes.damage);
+        this.updateHpBars();
+        if (playerRes.damage > 0) {
+          this.time.delayedCall(1000, () => {
+            this.dialogueText.setText(`${this.wildMonster.nickname} ${enemyRes.reason}`);
+            this.time.delayedCall(1000, () => this.checkTurnEnd());
+          });
+          return;
+        } else {
+          this.dialogueText.setText(`${this.wildMonster.nickname} ${enemyRes.reason}`);
+        }
+      }
+      this.time.delayedCall(1000, () => this.checkTurnEnd());
     } else {
-      const ctx = {
-        attackerLevel: this.wildMonster.level,
-        attackerAtk: calculateStat(enemySpecies.baseStats.atk, this.wildMonster.level),
-        attackerType: enemySpecies.type,
-        defenderDef: calculateStat(playerSpecies.baseStats.def, activePlayer.level),
-        defenderType: playerSpecies.type,
-        move: enemyMove
-      };
-
-      const res = calculateDamage(ctx);
-      this.dialogueText.setText(`${this.wildMonster.nickname} used ${enemyMove.name}!`);
-
-      this.tweens.add({
-        targets: this.enemySprite,
-        x: '-=20',
-        duration: 90,
-        yoyo: true,
-        onComplete: () => {
-          if (res.hit) {
-            Sound.playHit(res.typeMultiplier > 1);
-            activePlayer.currentHp = Math.max(0, activePlayer.currentHp - res.damage);
-            this.cameras.main.shake(100, 0.005);
-            this.updateHpBars();
-            this.dialogueText.setText(`${this.wildMonster.nickname} dealt ${res.damage} damage!`);
-          } else {
-            this.dialogueText.setText(`${this.wildMonster.nickname}'s attack missed!`);
-          }
-          this.time.delayedCall(1000, next);
-        }
-      });
+      this.checkTurnEnd();
     }
   }
 
@@ -925,7 +1123,8 @@ export class BattleScene extends Phaser.Scene {
 
   private handleCatchAttempt(multiplier: number = 1.0) {
     const wildSpecies = getSpecies(this.wildMonster.speciesId);
-    const baseChance = calculateCatchChance(wildSpecies.stage, this.wildMonster.currentHp, this.wildMonster.maxHp);
+    const hasStatus = Boolean(this.wildMonster.status);
+    const baseChance = calculateCatchChance(wildSpecies.stage, this.wildMonster.currentHp, this.wildMonster.maxHp, hasStatus);
     const catchChance = Math.min(0.98, baseChance * multiplier);
     const roll = Math.random();
 

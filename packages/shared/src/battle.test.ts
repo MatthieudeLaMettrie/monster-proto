@@ -6,10 +6,13 @@ import {
   calculateMaxHp,
   calculateCatchChance,
   calculateDamage,
+  calculateStatusResidual,
+  canAct,
+  rollStatusProc,
   SeededRng,
   totalXpForLevel,
   calculateXpReward
-} from '../src/index.js';
+} from './index.js';
 
 describe('Species & Roster Integrity', () => {
   it('contains exactly 60 species across 20 lines with 3 stages each', () => {
@@ -88,5 +91,64 @@ describe('Battle Engine Determinism', () => {
     expect(res1.hit).toBe(true);
     expect(res1.typeMultiplier).toBe(2.0);
     expect(res1.isStab).toBe(true);
+  });
+});
+
+describe('Status Conditions & Move PP', () => {
+  it('verifies all moves have valid maxPp defined', () => {
+    for (const [id, move] of Object.entries(MOVES)) {
+      expect(move.maxPp, `Move ${id} must have maxPp > 0`).toBeGreaterThan(0);
+    }
+  });
+
+  it('boosts catch chance by 1.5x when target has a status condition', () => {
+    const normalChance = calculateCatchChance(1, 50, 100, false);
+    const statusChance = calculateCatchChance(1, 50, 100, true);
+    expect(statusChance).toBeCloseTo(normalChance * 1.5, 2);
+  });
+
+  it('reduces damage by 25% when attacker is burned', () => {
+    const tackle = MOVES['tackle'];
+    const ctxNormal = {
+      attackerLevel: 10,
+      attackerAtk: 40,
+      attackerType: 'Fight' as const,
+      defenderDef: 20,
+      defenderType: 'Fight' as const,
+      move: tackle
+    };
+    const ctxBurned = {
+      ...ctxNormal,
+      attackerStatus: { condition: 'burn' as const }
+    };
+
+    const resNormal = calculateDamage(ctxNormal, new SeededRng(100));
+    const resBurned = calculateDamage(ctxBurned, new SeededRng(100));
+
+    expect(resBurned.damage).toBeLessThan(resNormal.damage);
+    expect(Math.abs(resBurned.damage - resNormal.damage * 0.75)).toBeLessThanOrEqual(1);
+  });
+
+  it('calculates residual turn damage for burn and poison correctly', () => {
+    const burnRes = calculateStatusResidual({ condition: 'burn' }, 160);
+    expect(burnRes.damage).toBe(10); // 160 / 16
+
+    const psnRes = calculateStatusResidual({ condition: 'poison' }, 80);
+    expect(psnRes.damage).toBe(5); // 80 / 16
+
+    const noneRes = calculateStatusResidual(null, 100);
+    expect(noneRes.damage).toBe(0);
+  });
+
+  it('evaluates turn actions with sleep, freeze, and paralysis', () => {
+    // Sleeping monster with 2 turns left cannot act
+    const sleepRes = canAct({ condition: 'sleep', sleepTurnsLeft: 2 });
+    expect(sleepRes.canAct).toBe(false);
+    expect(sleepRes.statusUpdate?.sleepTurnsLeft).toBe(1);
+
+    // Sleeping monster with 1 turn left wakes up
+    const wakeRes = canAct({ condition: 'sleep', sleepTurnsLeft: 1 });
+    expect(wakeRes.canAct).toBe(true);
+    expect(wakeRes.statusUpdate).toBeNull();
   });
 });

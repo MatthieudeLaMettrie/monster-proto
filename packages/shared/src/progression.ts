@@ -29,11 +29,14 @@ export function calculateXpReward(baseXp: number, enemyLevel: number): number {
 
 // Catch probability calculation
 // stageCatch: stage 1 = 0.6, stage 2 = 0.3
-// catchChance = clamp(stageCatch * (1 - 0.7 * currentHp / maxHp), 0.05, 0.95)
-export function calculateCatchChance(stage: 1 | 2 | 3, currentHp: number, maxHp: number): number {
+// catchChance = clamp(stageCatch * (1 - 0.7 * currentHp / maxHp) * (hasStatus ? 1.5 : 1), 0.05, 0.95)
+export function calculateCatchChance(stage: 1 | 2 | 3, currentHp: number, maxHp: number, hasStatus = false): number {
   const stageCatch = stage === 1 ? 0.6 : 0.3;
   const hpRatio = Math.max(0, Math.min(1, currentHp / maxHp));
-  const chance = stageCatch * (1.0 - 0.7 * hpRatio);
+  let chance = stageCatch * (1.0 - 0.7 * hpRatio);
+  if (hasStatus) {
+    chance *= 1.5;
+  }
   return Math.max(0.05, Math.min(0.95, chance));
 }
 

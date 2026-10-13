@@ -136,9 +136,10 @@ export class PartyScene extends Phaser.Scene {
 
       this.add.image(x - 65, y, `monster-${spec.id}`).setScale(0.85).setName('tab-content');
 
-      this.add.text(x - 25, y - 22, `${mon.nickname} ${isLeader ? '★ LEAD' : ''}`, {
+      const statusTag = mon.status ? ` [${mon.status.condition.toUpperCase()}]` : '';
+      this.add.text(x - 25, y - 22, `${mon.nickname}${statusTag} ${isLeader ? '★ LEAD' : ''}`, {
         fontSize: '11px',
-        color: isLeader ? '#38bdf8' : '#fff',
+        color: mon.status ? '#fb923c' : isLeader ? '#38bdf8' : '#fff',
         fontStyle: 'bold'
       }).setName('tab-content');
 

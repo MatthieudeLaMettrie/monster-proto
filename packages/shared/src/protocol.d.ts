@@ -8,6 +8,17 @@ export declare const SaveMonsterSchema: z.ZodObject<{
     currentHp: z.ZodNumber;
     maxHp: z.ZodNumber;
     moves: z.ZodArray<z.ZodString, "many">;
+    movePp: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodNumber>>;
+    status: z.ZodOptional<z.ZodNullable<z.ZodObject<{
+        condition: z.ZodEnum<["burn", "poison", "paralysis", "sleep", "freeze"]>;
+        sleepTurnsLeft: z.ZodOptional<z.ZodNumber>;
+    }, "strip", z.ZodTypeAny, {
+        condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+        sleepTurnsLeft?: number | undefined;
+    }, {
+        condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+        sleepTurnsLeft?: number | undefined;
+    }>>>;
     partySlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
 }, "strip", z.ZodTypeAny, {
     id: string;
@@ -18,6 +29,11 @@ export declare const SaveMonsterSchema: z.ZodObject<{
     currentHp: number;
     maxHp: number;
     moves: string[];
+    status?: {
+        condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+        sleepTurnsLeft?: number | undefined;
+    } | null | undefined;
+    movePp?: Record<string, number> | undefined;
     partySlot?: number | null | undefined;
 }, {
     id: string;
@@ -28,6 +44,11 @@ export declare const SaveMonsterSchema: z.ZodObject<{
     currentHp: number;
     maxHp: number;
     moves: string[];
+    status?: {
+        condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+        sleepTurnsLeft?: number | undefined;
+    } | null | undefined;
+    movePp?: Record<string, number> | undefined;
     partySlot?: number | null | undefined;
 }>;
 export declare const SaveStateSchema: z.ZodObject<{
@@ -43,6 +64,17 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: z.ZodNumber;
         maxHp: z.ZodNumber;
         moves: z.ZodArray<z.ZodString, "many">;
+        movePp: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodNumber>>;
+        status: z.ZodOptional<z.ZodNullable<z.ZodObject<{
+            condition: z.ZodEnum<["burn", "poison", "paralysis", "sleep", "freeze"]>;
+            sleepTurnsLeft: z.ZodOptional<z.ZodNumber>;
+        }, "strip", z.ZodTypeAny, {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        }, {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        }>>>;
         partySlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
@@ -53,6 +85,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }, {
         id: string;
@@ -63,6 +100,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }>, "many">;
     box: z.ZodArray<z.ZodObject<{
@@ -74,6 +116,17 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: z.ZodNumber;
         maxHp: z.ZodNumber;
         moves: z.ZodArray<z.ZodString, "many">;
+        movePp: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodNumber>>;
+        status: z.ZodOptional<z.ZodNullable<z.ZodObject<{
+            condition: z.ZodEnum<["burn", "poison", "paralysis", "sleep", "freeze"]>;
+            sleepTurnsLeft: z.ZodOptional<z.ZodNumber>;
+        }, "strip", z.ZodTypeAny, {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        }, {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        }>>>;
         partySlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
@@ -84,6 +137,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }, {
         id: string;
@@ -94,6 +152,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }>, "many">;
     dex: z.ZodRecord<z.ZodString, z.ZodBoolean>;
@@ -110,6 +173,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }[];
     box: {
@@ -121,6 +189,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }[];
     dex: Record<string, boolean>;
@@ -137,6 +210,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }[];
     box: {
@@ -148,6 +226,11 @@ export declare const SaveStateSchema: z.ZodObject<{
         currentHp: number;
         maxHp: number;
         moves: string[];
+        status?: {
+            condition: "burn" | "poison" | "paralysis" | "sleep" | "freeze";
+            sleepTurnsLeft?: number | undefined;
+        } | null | undefined;
+        movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
     }[];
     dex: Record<string, boolean>;
