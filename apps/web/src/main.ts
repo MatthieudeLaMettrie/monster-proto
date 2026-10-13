@@ -3,6 +3,7 @@ import { GalleryScene } from './GalleryScene.js';
 import { OverworldScene } from './OverworldScene.js';
 import { BattleScene } from './BattleScene.js';
 import { PartyScene } from './PartyScene.js';
+import { BoxScene } from './BoxScene.js';
 import { StarterSelectScene } from './StarterSelectScene.js';
 import { PersistenceManager } from './persistence.js';
 
@@ -114,7 +115,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
-  scene: [BootScene, StarterSelectScene, OverworldScene, BattleScene, PartyScene, GalleryScene]
+  scene: [BootScene, StarterSelectScene, OverworldScene, BattleScene, PartyScene, BoxScene, GalleryScene]
 };
 
 import { Sound } from './SoundManager.js';
@@ -199,8 +200,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
   saveBtn?.addEventListener('click', async () => {
     const rawParty = localStorage.getItem('monster_proto_party');
+    const rawBox = localStorage.getItem('monster_proto_box');
     const rawDex = localStorage.getItem('monster_proto_dex');
     const party = rawParty ? JSON.parse(rawParty) : [];
+    const box = rawBox ? JSON.parse(rawBox) : [];
     const dex = rawDex ? JSON.parse(rawDex) : { 1: true };
 
     const savePayload = {
@@ -208,7 +211,7 @@ window.addEventListener('DOMContentLoaded', () => {
       posY: 5,
       championBeaten: 0,
       party,
-      box: [],
+      box,
       dex
     };
 

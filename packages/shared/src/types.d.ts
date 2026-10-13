@@ -41,4 +41,6 @@ export interface MonsterInstance {
     movePp?: Record<string, number>;
     status?: MonsterStatus | null;
     partySlot?: number | null;
+    boxNumber?: number | null;
+    boxSlot?: number | null;
 }

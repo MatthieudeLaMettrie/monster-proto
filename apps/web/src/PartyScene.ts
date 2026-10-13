@@ -184,6 +184,22 @@ export class PartyScene extends Phaser.Scene {
         }).setOrigin(0.5).setName('tab-content');
       }
     });
+
+    // PC Storage Box Shortcut Button
+    const pcBtn = this.add.rectangle(240, 298, 170, 22, 0x1e293b)
+      .setStrokeStyle(1, 0x38bdf8)
+      .setInteractive({ useHandCursor: true })
+      .setName('tab-content')
+      .on('pointerdown', () => {
+        this.scene.stop('PartyScene');
+        this.scene.start('BoxScene', { returnScene: this.returnScene });
+      });
+
+    this.add.text(240, 298, '💾 Open PC Storage Box', {
+      fontSize: '9.5px',
+      color: '#38bdf8',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setName('tab-content');
   }
 
   private setPartyLeader(idx: number) {

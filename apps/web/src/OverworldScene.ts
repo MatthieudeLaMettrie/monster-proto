@@ -345,6 +345,12 @@ export class OverworldScene extends Phaser.Scene {
       return;
     }
 
+    // Check PC Storage Terminal Spot at (12, 8)
+    if (x === 12 && y === 8) {
+      this.openPcStorage();
+      return;
+    }
+
     // Check Champion Spot at Dojo
     if (x === this.mapData.championSpot.x && y === this.mapData.championSpot.y) {
       this.showChampionPrompt();
@@ -356,6 +362,11 @@ export class OverworldScene extends Phaser.Scene {
     if (leader) {
       this.showGymLeaderPrompt(leader);
       return;
+    }
+
+    // Proximity alerts
+    if (Math.abs(12 - x) <= 1 && Math.abs(8 - y) <= 1) {
+      this.logText.setText('💻 Pokémon Storage PC Terminal nearby! Step on it or click to manage boxes.');
     }
 
     // Nearby Gym Leader proximity alert
@@ -1085,6 +1096,47 @@ export class OverworldScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut'
     });
+
+    // PC Storage Terminal at (12, 8) right outside the clinic
+    const pcX = 12 * this.tileSize + 8;
+    const pcY = 8 * this.tileSize + 8;
+
+    // Terminal Desk / Base
+    gfx.fillStyle(0x334155, 1);
+    gfx.fillRect(pcX - 6, pcY - 5, 12, 11);
+    gfx.fillStyle(0x475569, 1);
+    gfx.fillRect(pcX - 5, pcY - 4, 10, 9);
+
+    // CRT Monitor & Phosphor Screen
+    gfx.fillStyle(0x0f172a, 1);
+    gfx.fillRect(pcX - 4, pcY - 3, 8, 7);
+    gfx.fillStyle(0x06b6d4, 0.9); // Glowing cyan screen
+    gfx.fillRect(pcX - 3, pcY - 2, 6, 5);
+
+    // Screen phosphor scanline pulse
+    const screenGlow = this.add.circle(pcX, pcY, 3, 0x38bdf8, 0.6).setDepth(4);
+    this.tweens.add({
+      targets: screenGlow,
+      alpha: 0.15,
+      scale: 1.3,
+      duration: 800,
+      yoyo: true,
+      repeat: -1
+    });
+
+    // Floating tag
+    this.add.text(pcX, pcY - 12, '💻 PC Box', {
+      fontSize: '7.5px',
+      color: '#38bdf8',
+      backgroundColor: '#0f172aEE',
+      padding: { x: 2, y: 1 }
+    }).setOrigin(0.5).setDepth(10);
+
+    // Interactive Hit Zone
+    const pcHitZone = this.add.zone(pcX, pcY, 18, 18).setInteractive({ useHandCursor: true }).setDepth(11);
+    pcHitZone.on('pointerdown', () => {
+      this.openPcStorage();
+    });
   }
 
   private renderTownFountain(gfx: Phaser.GameObjects.Graphics) {
@@ -1526,6 +1578,17 @@ export class OverworldScene extends Phaser.Scene {
     this.scene.launch('PartyScene', {
       party,
       dex,
+      returnScene: 'OverworldScene'
+    });
+  }
+
+  public openPcStorage() {
+    Sound.playCatchSuccess();
+    if (this.logText && this.logText.active) {
+      this.logText.setText('💻 Connected to Pokémon Storage System! Opening PC Boxes...');
+    }
+    this.scene.pause('OverworldScene');
+    this.scene.launch('BoxScene', {
       returnScene: 'OverworldScene'
     });
   }

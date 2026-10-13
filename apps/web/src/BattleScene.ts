@@ -16,7 +16,8 @@ import {
   canAct,
   calculateStatusResidual,
   rollStatusProc,
-  MonsterStatus
+  MonsterStatus,
+  findFirstAvailableBoxSlot
 } from '@monster-proto/shared';
 import { Sound } from './SoundManager.js';
 import { PersistenceManager } from './persistence.js';
@@ -1172,10 +1173,31 @@ export class BattleScene extends Phaser.Scene {
           duration: 350
         });
 
-        // Add to party
+        // Add to party if room; otherwise transfer to PC Storage Box
         if (this.playerParty.length < 6) {
           this.wildMonster.partySlot = this.playerParty.length;
+          this.wildMonster.boxNumber = null;
+          this.wildMonster.boxSlot = null;
           this.playerParty.push(this.wildMonster);
+          this.dialogueText.setText(`Gotcha! ${wildSpecies.name} was added to your Party!`);
+        } else {
+          try {
+            const rawBox = localStorage.getItem('monster_proto_box');
+            const boxMonsters: MonsterInstance[] = rawBox ? JSON.parse(rawBox) : [];
+            const slot = findFirstAvailableBoxSlot(boxMonsters, 1);
+            if (slot) {
+              this.wildMonster.partySlot = null;
+              this.wildMonster.boxNumber = slot.boxNumber;
+              this.wildMonster.boxSlot = slot.boxSlot;
+              boxMonsters.push(this.wildMonster);
+              localStorage.setItem('monster_proto_box', JSON.stringify(boxMonsters));
+              this.dialogueText.setText(`Party is full! ${wildSpecies.name} was sent to PC Box ${slot.boxNumber} (Slot ${slot.boxSlot + 1})!`);
+            } else {
+              this.dialogueText.setText(`Party & all PC Storage Boxes are full! Released ${wildSpecies.name}.`);
+            }
+          } catch {
+            this.dialogueText.setText(`Gotcha! ${wildSpecies.name} was caught!`);
+          }
         }
 
         // Register in Dex

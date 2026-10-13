@@ -20,6 +20,8 @@ export declare const SaveMonsterSchema: z.ZodObject<{
         sleepTurnsLeft?: number | undefined;
     }>>>;
     partySlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    boxNumber: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    boxSlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
 }, "strip", z.ZodTypeAny, {
     id: string;
     speciesId: number;
@@ -35,6 +37,8 @@ export declare const SaveMonsterSchema: z.ZodObject<{
     } | null | undefined;
     movePp?: Record<string, number> | undefined;
     partySlot?: number | null | undefined;
+    boxNumber?: number | null | undefined;
+    boxSlot?: number | null | undefined;
 }, {
     id: string;
     speciesId: number;
@@ -50,6 +54,8 @@ export declare const SaveMonsterSchema: z.ZodObject<{
     } | null | undefined;
     movePp?: Record<string, number> | undefined;
     partySlot?: number | null | undefined;
+    boxNumber?: number | null | undefined;
+    boxSlot?: number | null | undefined;
 }>;
 export declare const SaveStateSchema: z.ZodObject<{
     posX: z.ZodNumber;
@@ -76,6 +82,8 @@ export declare const SaveStateSchema: z.ZodObject<{
             sleepTurnsLeft?: number | undefined;
         }>>>;
         partySlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+        boxNumber: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+        boxSlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         speciesId: number;
@@ -91,6 +99,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }, {
         id: string;
         speciesId: number;
@@ -106,6 +116,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }>, "many">;
     box: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
@@ -128,6 +140,8 @@ export declare const SaveStateSchema: z.ZodObject<{
             sleepTurnsLeft?: number | undefined;
         }>>>;
         partySlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+        boxNumber: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+        boxSlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         speciesId: number;
@@ -143,6 +157,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }, {
         id: string;
         speciesId: number;
@@ -158,6 +174,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }>, "many">;
     dex: z.ZodRecord<z.ZodString, z.ZodBoolean>;
     badges: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodBoolean>>;
@@ -180,6 +198,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }[];
     box: {
         id: string;
@@ -196,6 +216,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }[];
     dex: Record<string, boolean>;
     badges?: Record<string, boolean> | undefined;
@@ -218,6 +240,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }[];
     box: {
         id: string;
@@ -234,6 +258,8 @@ export declare const SaveStateSchema: z.ZodObject<{
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }[];
     dex: Record<string, boolean>;
     badges?: Record<string, boolean> | undefined;

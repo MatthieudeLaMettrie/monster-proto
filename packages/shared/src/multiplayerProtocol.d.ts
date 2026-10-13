@@ -96,6 +96,8 @@ export declare const ClientBattleMessageSchema: z.ZodDiscriminatedUnion<"type", 
             sleepTurnsLeft?: number | undefined;
         }>>>;
         partySlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+        boxNumber: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+        boxSlot: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         speciesId: number;
@@ -111,6 +113,8 @@ export declare const ClientBattleMessageSchema: z.ZodDiscriminatedUnion<"type", 
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }, {
         id: string;
         speciesId: number;
@@ -126,6 +130,8 @@ export declare const ClientBattleMessageSchema: z.ZodDiscriminatedUnion<"type", 
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
     type: "pick_team";
@@ -144,6 +150,8 @@ export declare const ClientBattleMessageSchema: z.ZodDiscriminatedUnion<"type", 
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }[];
 }, {
     type: "pick_team";
@@ -162,6 +170,8 @@ export declare const ClientBattleMessageSchema: z.ZodDiscriminatedUnion<"type", 
         } | null | undefined;
         movePp?: Record<string, number> | undefined;
         partySlot?: number | null | undefined;
+        boxNumber?: number | null | undefined;
+        boxSlot?: number | null | undefined;
     }[];
 }>, z.ZodObject<{
     type: z.ZodLiteral<"action">;
