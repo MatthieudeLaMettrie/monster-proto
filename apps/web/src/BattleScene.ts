@@ -217,7 +217,10 @@ export class BattleScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.isActing = false;
       this.tweens.killAll();
+      Sound.stopBgm();
     });
+
+    Sound.playBgm(this.isTrainerBattle ? 'boss' : 'battle');
 
     // Background arena
     this.add.rectangle(240, 160, 480, 320, 0x1e293b);

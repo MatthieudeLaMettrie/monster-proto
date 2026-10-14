@@ -16,7 +16,7 @@ import {
   BADGES,
   REQUIRED_BADGES_FOR_CHAMPION
 } from '@monster-proto/shared';
-import { Sound } from './SoundManager.js';
+import { Sound, BgmTrack } from './SoundManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
 import { createTrainerTextures } from './TrainerTexture.js';
 
@@ -94,6 +94,27 @@ export class OverworldScene extends Phaser.Scene {
   private gymLeaderPromptContainer?: Phaser.GameObjects.Container;
   private otherPlayerSprites: Map<string, { rect: Phaser.GameObjects.Rectangle; nameTag: Phaser.GameObjects.Text }> = new Map();
 
+  // Audiovisual Atmosphere & Day/Night (Pillar 4)
+  private dayNightOverlay!: Phaser.GameObjects.Rectangle;
+  private timeMode: 'real' | 'day' | 'dusk' | 'night' | 'dawn' = 'real';
+  private timeBtnText?: Phaser.GameObjects.Text;
+  private timeBtnBg?: Phaser.GameObjects.Rectangle;
+  private currentBgmTrack: BgmTrack = 'none';
+  private currentWeather: 'none' | 'rain' | 'leaves' | 'embers' | 'starlight' = 'none';
+  private weatherParticles: Array<{
+    shape: Phaser.GameObjects.Shape;
+    vx: number;
+    vy: number;
+    baseAlpha: number;
+    swaySpeed?: number;
+    swayAmp?: number;
+    swayOffset?: number;
+    type: 'rain' | 'leaf' | 'firefly' | 'ember' | 'star';
+  }> = [];
+  private nightLights: Phaser.GameObjects.Arc[] = [];
+  private playerGlow?: Phaser.GameObjects.Arc;
+  private timeCheckTimer?: Phaser.Time.TimerEvent;
+
   constructor() {
     super('OverworldScene');
   }
@@ -128,9 +149,24 @@ export class OverworldScene extends Phaser.Scene {
     // Setup walking companion monster
     this.setupCompanion();
 
-    // Refresh companion when returning from PartyScene
+    // Audiovisual Atmosphere & Lighting (Pillar 4)
+    this.setupWorldLights();
+    this.setupDayNight();
+    this.setupWeatherParticles();
+    this.updateOverworldBgm();
+    this.updateWeatherZone(this.playerTile.x, this.playerTile.y);
+
+    // Refresh companion and resume BGM when returning from PartyScene / BoxScene
     this.events.on('resume', () => {
       this.refreshCompanion();
+      this.updateOverworldBgm();
+    });
+
+    this.events.once('shutdown', () => {
+      Sound.stopBgm();
+      if (this.timeCheckTimer) {
+        this.timeCheckTimer.destroy();
+      }
     });
 
     // Camera setup
@@ -151,15 +187,15 @@ export class OverworldScene extends Phaser.Scene {
     }
 
     // UI Overlays: Location Banner (Top-Left)
-    this.bannerText = this.add.text(12, 12, 'Pallet Plaza (Safe Town)', {
-      fontSize: '12px',
+    this.bannerText = this.add.text(10, 10, 'Pallet Plaza (Safe Town)', {
+      fontSize: '11px',
       color: '#FFFFFF',
       backgroundColor: '#0f172aEE',
-      padding: { x: 8, y: 5 }
+      padding: { x: 7, y: 5 }
     }).setScrollFactor(0).setDepth(200);
 
     // Sprint Mode Button (Top-Right, left of Party)
-    const sprintBg = this.add.rectangle(325, 20, 84, 26, 0x334155)
+    const sprintBg = this.add.rectangle(310, 20, 80, 26, 0x334155)
       .setScrollFactor(0)
       .setDepth(200)
       .setInteractive({ useHandCursor: true })
@@ -169,20 +205,20 @@ export class OverworldScene extends Phaser.Scene {
         this.sprintBtnText?.setText(this.isSprinting ? '👟 SPRINT: ON' : '👟 SPRINT: OFF');
       });
 
-    this.sprintBtnText = this.add.text(325, 20, '👟 SPRINT: OFF', {
+    this.sprintBtnText = this.add.text(310, 20, '👟 SPRINT: OFF', {
       fontSize: '9px',
       color: '#FFFFFF',
       fontStyle: 'bold'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
     // Big Prominent Party & DEX Button (Top-Right)
-    this.add.rectangle(425, 20, 96, 26, 0x0284c7)
+    this.add.rectangle(418, 20, 94, 26, 0x0284c7)
       .setScrollFactor(0)
       .setDepth(200)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.openPartyMenu());
 
-    this.add.text(425, 20, '👥 PARTY / DEX', {
+    this.add.text(418, 20, '👥 PARTY / DEX', {
       fontSize: '10px',
       color: '#FFFFFF',
       fontStyle: 'bold'
@@ -199,7 +235,12 @@ export class OverworldScene extends Phaser.Scene {
     this.createVirtualDpad();
   }
 
-  update() {
+  update(time: number, delta: number) {
+    this.updateWeather(time, delta);
+    if (this.playerGlow && this.playerSprite) {
+      this.playerGlow.setPosition(this.playerSprite.x, this.playerSprite.y);
+    }
+
     if (this.isMoving) return;
 
     let dx = 0;
@@ -284,9 +325,17 @@ export class OverworldScene extends Phaser.Scene {
       y: targetY * this.tileSize + 8,
       duration: stepDuration,
       ease: 'Linear',
+      onUpdate: () => {
+        if (this.playerGlow) {
+          this.playerGlow.setPosition(this.playerSprite.x, this.playerSprite.y);
+        }
+      },
       onComplete: () => {
         this.isMoving = false;
         this.playerSprite.setTexture(`trainer-${this.facing}-0`);
+        if (this.playerGlow) {
+          this.playerGlow.setPosition(this.playerSprite.x, this.playerSprite.y);
+        }
         this.onStepComplete(targetX, targetY);
       }
     });
@@ -402,6 +451,10 @@ export class OverworldScene extends Phaser.Scene {
     } else {
       this.bannerText.setText('Pallet Plaza (Town)');
     }
+
+    // Dynamic BGM and Weather Zone transitions (Pillar 4)
+    this.updateOverworldBgm(x, y);
+    this.updateWeatherZone(x, y);
   }
 
   private renderChampionNpc() {
@@ -1738,5 +1791,412 @@ export class OverworldScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     container.add([bg, title, desc, acceptBtn, acceptTxt, declineBtn, declineTxt]);
+  }
+
+  // =========================================================================
+  // Pillar 4: Audiovisual Atmosphere, Day/Night Cycle & Biome Weather Particles
+  // =========================================================================
+
+  private setupWorldLights() {
+    this.nightLights = [];
+
+    const createLight = (x: number, y: number, radius: number, color: number) => {
+      const light = this.add.circle(x, y, radius, color, 0)
+        .setDepth(9)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.nightLights.push(light);
+      return light;
+    };
+
+    // Pallet Plaza Clinic window & entrance
+    createLight(10 * this.tileSize + 8, 8 * this.tileSize + 8, 28, 0xfef08a);
+    // Pallet Plaza PC Terminal
+    createLight(12 * this.tileSize + 8, 8 * this.tileSize + 8, 20, 0x38bdf8);
+    // Pallet Plaza Lanterns
+    createLight(6 * this.tileSize + 8, 10 * this.tileSize + 8, 22, 0xfde047);
+    createLight(16 * this.tileSize + 8, 10 * this.tileSize + 8, 22, 0xfde047);
+    // Lake Azure Pier Lamp
+    createLight(14 * this.tileSize + 8, 28 * this.tileSize + 8, 26, 0x38bdf8);
+    // Old Grove Fairy Shrine
+    createLight(38 * this.tileSize + 8, 39 * this.tileSize + 8, 36, 0xc084fc);
+    // Ember Crags Volcano Vent
+    createLight(65 * this.tileSize + 8, 8 * this.tileSize + 8, 36, 0xf97316);
+    // Pagoda Dojo Lanterns
+    createLight(60 * this.tileSize + 8, 44 * this.tileSize + 8, 26, 0xf59e0b);
+    createLight(68 * this.tileSize + 8, 46 * this.tileSize + 8, 26, 0xf59e0b);
+
+    // Player personal night lantern
+    this.playerGlow = this.add.circle(
+      this.playerSprite ? this.playerSprite.x : 10 * this.tileSize + 8,
+      this.playerSprite ? this.playerSprite.y : 10 * this.tileSize + 8,
+      24,
+      0xfef08a,
+      0
+    ).setDepth(9).setBlendMode(Phaser.BlendModes.ADD);
+
+    // Gentle pulsing breathing tween
+    this.nightLights.forEach((light, i) => {
+      this.tweens.add({
+        targets: light,
+        scale: { from: 0.92, to: 1.12 },
+        duration: 1500 + i * 200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    });
+  }
+
+  private setupDayNight() {
+    const saved = localStorage.getItem('monster_proto_time_mode') as any;
+    if (saved && ['real', 'day', 'dusk', 'night', 'dawn'].includes(saved)) {
+      this.timeMode = saved;
+    }
+
+    // Fullscreen day/night lighting overlay (Depth 150: above map/sprites, below HUD)
+    this.dayNightOverlay = this.add.rectangle(240, 160, 480, 320, 0x000000, 0)
+      .setScrollFactor(0)
+      .setDepth(150);
+
+    // Interactive Time-of-Day button in HUD (Pillar 4)
+    this.timeBtnBg = this.add.rectangle(215, 20, 78, 26, 0x1e293b)
+      .setScrollFactor(0)
+      .setDepth(200)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        this.cycleTimeMode();
+      });
+
+    this.timeBtnText = this.add.text(215, 20, '☀️ DAY', {
+      fontSize: '9px',
+      color: '#FFFFFF',
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
+
+    this.applyDayNight(true);
+
+    // Periodically update clock display and sunlight when in 'real' mode
+    this.timeCheckTimer = this.time.addEvent({
+      delay: 30000,
+      loop: true,
+      callback: () => {
+        if (this.timeMode === 'real') {
+          this.applyDayNight(false);
+        }
+      }
+    });
+  }
+
+  private cycleTimeMode() {
+    const modes: Array<'real' | 'day' | 'dusk' | 'night' | 'dawn'> = ['real', 'day', 'dusk', 'night', 'dawn'];
+    const curIdx = modes.indexOf(this.timeMode);
+    this.timeMode = modes[(curIdx + 1) % modes.length];
+    localStorage.setItem('monster_proto_time_mode', this.timeMode);
+
+    Sound.playSelect();
+    this.applyDayNight(false);
+
+    const desc = {
+      real: 'Synchronized to Real System Clock',
+      day: 'Daylight Mode (Bright & Clear)',
+      dusk: 'Sunset Dusk (Golden Amber Glow)',
+      night: 'Midnight Moonlight (Dark Indigo & Windows Lit)',
+      dawn: 'Dawn Morning (Soft Lavender Sunrise)'
+    }[this.timeMode];
+
+    this.logText.setText(`🕒 Atmosphere: ${desc}`);
+  }
+
+  private getDayNightSetting(): { color: number; alpha: number; label: string; icon: string; glowAlpha: number } {
+    let hour = new Date().getHours() + new Date().getMinutes() / 60;
+
+    if (this.timeMode === 'day') hour = 12;
+    else if (this.timeMode === 'dusk') hour = 18.5;
+    else if (this.timeMode === 'night') hour = 23;
+    else if (this.timeMode === 'dawn') hour = 6.5;
+
+    if (hour >= 8 && hour < 17) {
+      return { color: 0x000000, alpha: 0.0, label: 'DAY', icon: '☀️', glowAlpha: 0.0 };
+    } else if (hour >= 17 && hour < 20) {
+      return { color: 0xf97316, alpha: 0.28, label: 'DUSK', icon: '🌅', glowAlpha: 0.55 };
+    } else if (hour >= 20 || hour < 6) {
+      return { color: 0x0f172a, alpha: 0.52, label: 'NIGHT', icon: '🌙', glowAlpha: 0.75 };
+    } else {
+      return { color: 0xa855f7, alpha: 0.22, label: 'DAWN', icon: '🌄', glowAlpha: 0.40 };
+    }
+  }
+
+  private applyDayNight(immediate = false) {
+    const setting = this.getDayNightSetting();
+    const btnLabel = this.timeMode === 'real'
+      ? `⏰ ${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`
+      : `${setting.icon} ${setting.label}`;
+
+    this.timeBtnText?.setText(btnLabel);
+
+    if (this.timeBtnBg) {
+      this.timeBtnBg.setFillStyle(
+        this.timeMode === 'night' ? 0x1e1b4b :
+        this.timeMode === 'dusk' ? 0x7c2d12 :
+        this.timeMode === 'dawn' ? 0x581c87 : 0x1e293b
+      );
+    }
+
+    if (immediate) {
+      this.dayNightOverlay.setFillStyle(setting.color, setting.alpha);
+      this.nightLights.forEach(light => light.setAlpha(setting.glowAlpha));
+      if (this.playerGlow) this.playerGlow.setAlpha(setting.glowAlpha * 0.45);
+    } else {
+      this.tweens.add({
+        targets: this.dayNightOverlay,
+        alpha: setting.alpha,
+        duration: 350,
+        onUpdate: () => {
+          this.dayNightOverlay.fillColor = setting.color;
+        }
+      });
+
+      this.nightLights.forEach(light => {
+        this.tweens.add({
+          targets: light,
+          alpha: setting.glowAlpha,
+          duration: 350
+        });
+      });
+
+      if (this.playerGlow) {
+        this.tweens.add({
+          targets: this.playerGlow,
+          alpha: setting.glowAlpha * 0.45,
+          duration: 350
+        });
+      }
+    }
+  }
+
+  private setupWeatherParticles() {
+    this.weatherParticles = [];
+
+    // Create 16 rectangles (used for rain streaks and drifting leaves)
+    for (let i = 0; i < 16; i++) {
+      const rect = this.add.rectangle(-100, -100, 2, 8, 0x38bdf8)
+        .setScrollFactor(0)
+        .setDepth(148)
+        .setVisible(false);
+
+      this.weatherParticles.push({
+        shape: rect,
+        vx: 0,
+        vy: 0,
+        baseAlpha: 0.5,
+        type: 'rain'
+      });
+    }
+
+    // Create 16 circles (used for embers, fireflies, and starlight)
+    for (let i = 0; i < 16; i++) {
+      const circle = this.add.circle(-100, -100, 2, 0xf97316)
+        .setScrollFactor(0)
+        .setDepth(148)
+        .setVisible(false);
+
+      this.weatherParticles.push({
+        shape: circle,
+        vx: 0,
+        vy: 0,
+        baseAlpha: 0.5,
+        type: 'ember'
+      });
+    }
+  }
+
+  private setWeather(target: 'none' | 'rain' | 'leaves' | 'embers' | 'starlight') {
+    this.currentWeather = target;
+
+    if (target === 'none') {
+      this.weatherParticles.forEach(p => p.shape.setVisible(false));
+      return;
+    }
+
+    if (target === 'rain') {
+      // 16 rain streak rectangles
+      this.weatherParticles.forEach((p) => {
+        if (p.shape instanceof Phaser.GameObjects.Rectangle) {
+          p.shape.setVisible(true);
+          p.shape.setSize(1.5, Phaser.Math.Between(8, 14));
+          p.shape.setFillStyle(0x38bdf8, 1);
+          p.shape.setPosition(Phaser.Math.Between(0, 480), Phaser.Math.Between(0, 320));
+          p.shape.setAngle(15);
+          p.vx = Phaser.Math.FloatBetween(1.2, 2.2);
+          p.vy = Phaser.Math.FloatBetween(7.5, 11.5);
+          p.baseAlpha = Phaser.Math.FloatBetween(0.35, 0.65);
+          p.shape.setAlpha(p.baseAlpha);
+          p.type = 'rain';
+        } else {
+          p.shape.setVisible(false);
+        }
+      });
+    } else if (target === 'leaves') {
+      // 10 leaf rectangles + 6 firefly circles
+      const leafColors = [0x16a34a, 0x22c55e, 0xd97706, 0xca8a04];
+      this.weatherParticles.forEach((p) => {
+        if (p.shape instanceof Phaser.GameObjects.Rectangle) {
+          p.shape.setVisible(true);
+          p.shape.setSize(4, 4);
+          p.shape.setFillStyle(Phaser.Utils.Array.GetRandom(leafColors), 1);
+          p.shape.setPosition(Phaser.Math.Between(0, 480), Phaser.Math.Between(0, 320));
+          p.shape.setAngle(Phaser.Math.Between(0, 360));
+          p.vx = Phaser.Math.FloatBetween(-1.2, -0.4);
+          p.vy = Phaser.Math.FloatBetween(0.8, 1.8);
+          p.swaySpeed = Phaser.Math.FloatBetween(0.002, 0.004);
+          p.swayAmp = Phaser.Math.FloatBetween(0.8, 1.6);
+          p.swayOffset = Math.random() * Math.PI * 2;
+          p.baseAlpha = Phaser.Math.FloatBetween(0.6, 0.85);
+          p.shape.setAlpha(p.baseAlpha);
+          p.type = 'leaf';
+        } else {
+          // Fireflies
+          p.shape.setVisible(true);
+          const circle = p.shape as Phaser.GameObjects.Arc;
+          circle.setRadius(2);
+          circle.setFillStyle(0xa3e635, 1);
+          circle.setPosition(Phaser.Math.Between(0, 480), Phaser.Math.Between(0, 320));
+          p.vx = Phaser.Math.FloatBetween(-0.4, 0.4);
+          p.vy = Phaser.Math.FloatBetween(-0.3, 0.3);
+          p.swayOffset = Math.random() * Math.PI * 2;
+          p.baseAlpha = Phaser.Math.FloatBetween(0.4, 0.8);
+          circle.setAlpha(p.baseAlpha);
+          p.type = 'firefly';
+        }
+      });
+    } else if (target === 'embers') {
+      // 16 ember circles rising upwards
+      const emberColors = [0xf97316, 0xef4444, 0xfacc15, 0xfb923c];
+      this.weatherParticles.forEach((p) => {
+        if (p.shape instanceof Phaser.GameObjects.Arc) {
+          p.shape.setVisible(true);
+          const circle = p.shape as Phaser.GameObjects.Arc;
+          circle.setRadius(Phaser.Math.FloatBetween(1.2, 2.4));
+          circle.setFillStyle(Phaser.Utils.Array.GetRandom(emberColors), 1);
+          circle.setPosition(Phaser.Math.Between(0, 480), Phaser.Math.Between(0, 320));
+          p.vx = Phaser.Math.FloatBetween(-0.6, 0.6);
+          p.vy = Phaser.Math.FloatBetween(-1.5, -3.2); // Upwards!
+          p.baseAlpha = Phaser.Math.FloatBetween(0.5, 0.9);
+          circle.setAlpha(p.baseAlpha);
+          p.type = 'ember';
+        } else {
+          p.shape.setVisible(false);
+        }
+      });
+    } else if (target === 'starlight') {
+      // 16 twinkling starlight specks
+      const starColors = [0xe0e7ff, 0xa5b4fc, 0x67e8f9, 0xffffff];
+      this.weatherParticles.forEach((p) => {
+        if (p.shape instanceof Phaser.GameObjects.Arc) {
+          p.shape.setVisible(true);
+          const circle = p.shape as Phaser.GameObjects.Arc;
+          circle.setRadius(Phaser.Math.FloatBetween(1.2, 2.2));
+          circle.setFillStyle(Phaser.Utils.Array.GetRandom(starColors), 1);
+          circle.setPosition(Phaser.Math.Between(0, 480), Phaser.Math.Between(0, 320));
+          p.vx = Phaser.Math.FloatBetween(-0.25, 0.25);
+          p.vy = Phaser.Math.FloatBetween(-0.15, 0.25);
+          p.swayOffset = Math.random() * Math.PI * 2;
+          p.baseAlpha = Phaser.Math.FloatBetween(0.35, 0.85);
+          circle.setAlpha(p.baseAlpha);
+          p.type = 'star';
+        } else {
+          p.shape.setVisible(false);
+        }
+      });
+    }
+  }
+
+  private updateWeather(time: number, delta: number) {
+    if (this.currentWeather === 'none') return;
+
+    for (const p of this.weatherParticles) {
+      if (!p.shape.visible) continue;
+
+      if (p.type === 'rain') {
+        p.shape.x += p.vx;
+        p.shape.y += p.vy;
+        if (p.shape.y > 325 || p.shape.x > 485) {
+          p.shape.y = -10;
+          p.shape.x = Phaser.Math.Between(-10, 470);
+        }
+      } else if (p.type === 'leaf') {
+        p.shape.x += p.vx + Math.sin(time * (p.swaySpeed || 0.003) + (p.swayOffset || 0)) * (p.swayAmp || 1.0);
+        p.shape.y += p.vy;
+        p.shape.angle += 1;
+        if (p.shape.y > 325 || p.shape.x < -10) {
+          p.shape.y = -10;
+          p.shape.x = Phaser.Math.Between(0, 490);
+        }
+      } else if (p.type === 'firefly') {
+        p.shape.x += p.vx;
+        p.shape.y += p.vy;
+        p.shape.setAlpha(Math.max(0.1, p.baseAlpha + Math.sin(time * 0.004 + (p.swayOffset || 0)) * 0.3));
+        if (p.shape.x < -10) p.shape.x = 490;
+        if (p.shape.x > 490) p.shape.x = -10;
+        if (p.shape.y < -10) p.shape.y = 330;
+        if (p.shape.y > 330) p.shape.y = -10;
+      } else if (p.type === 'ember') {
+        p.shape.x += p.vx + (Math.random() - 0.5) * 0.6;
+        p.shape.y += p.vy;
+        if (p.shape.y < -10) {
+          p.shape.y = 330;
+          p.shape.x = Phaser.Math.Between(0, 480);
+        }
+      } else if (p.type === 'star') {
+        p.shape.x += p.vx;
+        p.shape.y += p.vy;
+        p.shape.setAlpha(Math.max(0.15, p.baseAlpha + Math.sin(time * 0.003 + (p.swayOffset || 0)) * 0.35));
+        if (p.shape.x < -10) p.shape.x = 490;
+        if (p.shape.x > 490) p.shape.x = -10;
+        if (p.shape.y < -10) p.shape.y = 330;
+        if (p.shape.y > 330) p.shape.y = -10;
+      }
+    }
+  }
+
+  private updateWeatherZone(x: number, y: number) {
+    const currentZone = this.mapData.zones.find(
+      (z: any) => x >= z.x1 && x <= z.x2 && y >= z.y1 && y <= z.y2
+    );
+    const zoneId = currentZone ? currentZone.zoneId : 'pallet_plaza';
+
+    let targetWeather: 'none' | 'rain' | 'leaves' | 'embers' | 'starlight' = 'none';
+
+    if (zoneId === 'lakeshore' || zoneId === 'sunken_grotto') {
+      targetWeather = 'rain';
+    } else if (zoneId === 'old_grove') {
+      targetWeather = 'leaves';
+    } else if (zoneId === 'ember_crags') {
+      targetWeather = 'embers';
+    } else if (zoneId === 'celestial_summit' || zoneId === 'dojo_plateau') {
+      targetWeather = 'starlight';
+    } else {
+      targetWeather = 'none';
+    }
+
+    if (targetWeather !== this.currentWeather) {
+      this.setWeather(targetWeather);
+    }
+  }
+
+  private updateOverworldBgm(x?: number, y?: number) {
+    const tx = typeof x === 'number' ? x : this.playerTile.x;
+    const ty = typeof y === 'number' ? y : this.playerTile.y;
+
+    const currentZone = this.mapData.zones.find(
+      (z: any) => tx >= z.x1 && tx <= z.x2 && ty >= z.y1 && ty <= z.y2
+    );
+    const zoneId = currentZone ? currentZone.zoneId : 'pallet_plaza';
+
+    const targetBgm: BgmTrack = (zoneId === 'pallet_plaza') ? 'town' : 'route';
+    if (this.currentBgmTrack !== targetBgm) {
+      this.currentBgmTrack = targetBgm;
+      Sound.playBgm(targetBgm);
+    }
   }
 }

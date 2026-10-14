@@ -122,28 +122,104 @@ import { Sound } from './SoundManager.js';
 
 const game = new Phaser.Game(config);
 
-// Wire persistent HTML Top Navigation Bar buttons
+// Wire persistent HTML Top Navigation Bar buttons & Audio Panel (Pillar 4)
 window.addEventListener('DOMContentLoaded', () => {
   const soundBtn = document.getElementById('btn-sound');
   const partyBtn = document.getElementById('btn-party');
   const healBtn = document.getElementById('btn-heal');
   const saveBtn = document.getElementById('btn-save');
 
-  if (soundBtn) {
-    soundBtn.innerText = Sound.isMuted() ? '🔇 Muted' : '🔊 Audio';
-    soundBtn.addEventListener('click', () => {
-      const isMuted = Sound.toggleMute();
-      soundBtn.innerText = isMuted ? '🔇 Muted' : '🔊 Audio';
-      soundBtn.style.background = isMuted ? '#64748b' : '#0284c7';
-      const toast = document.getElementById('save-toast');
-      if (toast) {
-        toast.innerText = isMuted ? '🔇 Audio Muted' : '🔊 8-Bit Audio Enabled';
-        toast.style.background = isMuted ? '#64748b' : '#0284c7';
-        toast.style.opacity = '1';
-        setTimeout(() => (toast.style.opacity = '0'), 1500);
-      }
+  const audioPanel = document.getElementById('audio-panel');
+  const closeAudioBtn = document.getElementById('btn-close-audio');
+  const masterMuteBtn = document.getElementById('btn-master-mute');
+  const bgmSlider = document.getElementById('bgm-slider') as HTMLInputElement | null;
+  const sfxSlider = document.getElementById('sfx-slider') as HTMLInputElement | null;
+  const bgmVolVal = document.getElementById('bgm-vol-val');
+  const sfxVolVal = document.getElementById('sfx-vol-val');
+  const currentTrackName = document.getElementById('current-track-name');
+  const testSfxBtn = document.getElementById('btn-test-sfx');
+
+  const updateTrackDisplay = () => {
+    if (!currentTrackName) return;
+    const bgm = Sound.getCurrentBgm();
+    const trackNames: Record<string, string> = {
+      town: 'Pallet Plaza Town',
+      route: 'Wilderness Route',
+      battle: 'Wild Encounter',
+      boss: 'Gym Leader Battle',
+      none: 'None'
+    };
+    currentTrackName.innerText = trackNames[bgm] || 'None';
+  };
+
+  // Sync initial slider values
+  if (bgmSlider && bgmVolVal) {
+    const bgmPercent = Math.round(Sound.getBgmVolume() * 100);
+    bgmSlider.value = bgmPercent.toString();
+    bgmVolVal.innerText = `${bgmPercent}%`;
+    bgmSlider.addEventListener('input', (e) => {
+      const val = parseInt((e.target as HTMLInputElement).value, 10);
+      Sound.setBgmVolume(val / 100);
+      bgmVolVal.innerText = `${val}%`;
     });
   }
+
+  if (sfxSlider && sfxVolVal) {
+    const sfxPercent = Math.round(Sound.getSfxVolume() * 100);
+    sfxSlider.value = sfxPercent.toString();
+    sfxVolVal.innerText = `${sfxPercent}%`;
+    sfxSlider.addEventListener('input', (e) => {
+      const val = parseInt((e.target as HTMLInputElement).value, 10);
+      Sound.setSfxVolume(val / 100);
+      sfxVolVal.innerText = `${val}%`;
+    });
+  }
+
+  const syncMuteUi = () => {
+    const isMuted = Sound.isMuted();
+    if (soundBtn) {
+      soundBtn.innerText = isMuted ? '🔇 Audio' : '🔊 Audio';
+      soundBtn.style.background = isMuted ? '#64748b' : '#0284c7';
+    }
+    if (masterMuteBtn) {
+      masterMuteBtn.innerText = isMuted ? 'Unmute All' : 'Mute All';
+      masterMuteBtn.style.background = isMuted ? '#ef4444' : '#475569';
+    }
+  };
+  syncMuteUi();
+
+  soundBtn?.addEventListener('click', () => {
+    if (audioPanel) {
+      const isVisible = audioPanel.style.display !== 'none';
+      audioPanel.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible) {
+        updateTrackDisplay();
+      }
+    }
+  });
+
+  closeAudioBtn?.addEventListener('click', () => {
+    if (audioPanel) audioPanel.style.display = 'none';
+  });
+
+  masterMuteBtn?.addEventListener('click', () => {
+    const isMuted = Sound.toggleMute();
+    syncMuteUi();
+    const toast = document.getElementById('save-toast');
+    if (toast) {
+      toast.innerText = isMuted ? '🔇 All Audio Muted' : '🔊 8-Bit Audio Enabled';
+      toast.style.background = isMuted ? '#64748b' : '#0284c7';
+      toast.style.opacity = '1';
+      setTimeout(() => (toast.style.opacity = '0'), 1500);
+    }
+  });
+
+  testSfxBtn?.addEventListener('click', () => {
+    Sound.playSelect();
+  });
+
+  // Track updater interval
+  window.setInterval(updateTrackDisplay, 1000);
 
   partyBtn?.addEventListener('click', () => {
     const rawParty = localStorage.getItem('monster_proto_party');
