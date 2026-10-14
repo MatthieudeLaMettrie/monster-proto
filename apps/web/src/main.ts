@@ -125,6 +125,7 @@ const game = new Phaser.Game(config);
 // Wire persistent HTML Top Navigation Bar buttons & Audio Panel (Pillar 4)
 window.addEventListener('DOMContentLoaded', () => {
   const soundBtn = document.getElementById('btn-sound');
+  const mapBtn = document.getElementById('btn-map');
   const partyBtn = document.getElementById('btn-party');
   const healBtn = document.getElementById('btn-heal');
   const saveBtn = document.getElementById('btn-save');
@@ -221,6 +222,21 @@ window.addEventListener('DOMContentLoaded', () => {
   // Track updater interval
   window.setInterval(updateTrackDisplay, 1000);
 
+  mapBtn?.addEventListener('click', () => {
+    const overworld = game.scene.getScene('OverworldScene') as OverworldScene;
+    if (overworld && game.scene.isActive('OverworldScene')) {
+      overworld.toggleFullWorldMap();
+    } else {
+      const toast = document.getElementById('save-toast');
+      if (toast) {
+        toast.innerText = '🗺️ World Map is accessible while exploring the Overworld.';
+        toast.style.background = '#64748b';
+        toast.style.opacity = '1';
+        setTimeout(() => (toast.style.opacity = '0'), 1500);
+      }
+    }
+  });
+
   partyBtn?.addEventListener('click', () => {
     const rawParty = localStorage.getItem('monster_proto_party');
     const rawDex = localStorage.getItem('monster_proto_dex');
@@ -278,9 +294,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const rawParty = localStorage.getItem('monster_proto_party');
     const rawBox = localStorage.getItem('monster_proto_box');
     const rawDex = localStorage.getItem('monster_proto_dex');
+    const rawWaypoints = localStorage.getItem('monster_proto_waypoints');
     const party = rawParty ? JSON.parse(rawParty) : [];
     const box = rawBox ? JSON.parse(rawBox) : [];
     const dex = rawDex ? JSON.parse(rawDex) : { 1: true };
+    const waypoints = rawWaypoints ? JSON.parse(rawWaypoints) : ['pallet_town'];
 
     const savePayload = {
       posX: 5,
@@ -288,7 +306,8 @@ window.addEventListener('DOMContentLoaded', () => {
       championBeaten: 0,
       party,
       box,
-      dex
+      dex,
+      waypoints
     };
 
     const saved = await PersistenceManager.saveState(savePayload);

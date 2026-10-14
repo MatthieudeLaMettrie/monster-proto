@@ -14,7 +14,14 @@ import {
   GYM_LEADERS,
   GymLeaderDef,
   BADGES,
-  REQUIRED_BADGES_FOR_CHAMPION
+  REQUIRED_BADGES_FOR_CHAMPION,
+  WAYPOINTS,
+  WaypointDef,
+  DEFAULT_UNLOCKED_WAYPOINTS,
+  getWaypoint,
+  getWaypointForZone,
+  canFastTravel,
+  discoverWaypoint
 } from '@monster-proto/shared';
 import { Sound, BgmTrack } from './SoundManager.js';
 import { MultiplayerManager } from './MultiplayerManager.js';
@@ -115,6 +122,16 @@ export class OverworldScene extends Phaser.Scene {
   private playerGlow?: Phaser.GameObjects.Arc;
   private timeCheckTimer?: Phaser.Time.TimerEvent;
 
+  // World Mini-Map & Fast Travel (Pillar 5)
+  private unlockedWaypoints: string[] = ['pallet_town'];
+  private miniMapContainer?: Phaser.GameObjects.Container;
+  private miniMapGraphics?: Phaser.GameObjects.Graphics;
+  private miniMapPlayerDot?: Phaser.GameObjects.Arc;
+  private miniMapVisible = true;
+  private fullWorldMapModal?: Phaser.GameObjects.Container;
+  private selectedWaypointId = 'pallet_town';
+  private mapKey?: Phaser.Input.Keyboard.Key;
+
   constructor() {
     super('OverworldScene');
   }
@@ -184,6 +201,8 @@ export class OverworldScene extends Phaser.Scene {
         S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
         D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D)
       };
+      this.mapKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M);
+      this.mapKey.on('down', () => this.toggleFullWorldMap());
     }
 
     // UI Overlays: Location Banner (Top-Left)
@@ -224,7 +243,7 @@ export class OverworldScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
-    this.logText = this.add.text(12, 296, 'Move with Arrows / WASD. Hold Shift or tap 👟 SPRINT for high speed!', {
+    this.logText = this.add.text(12, 296, 'Move with Arrows / WASD. Hold Shift for SPRINT. Press [M] or tap 🗺️ RADAR for World Map!', {
       fontSize: '10px',
       color: '#CBD5E1',
       backgroundColor: '#0f172aEE',
@@ -233,9 +252,14 @@ export class OverworldScene extends Phaser.Scene {
 
     this.renderSignposts();
     this.createVirtualDpad();
+
+    // World Mini-Map Radar & Fast Travel (Pillar 5)
+    this.setupMiniMapRadar();
   }
 
   update(time: number, delta: number) {
+    if (this.fullWorldMapModal) return;
+
     this.updateWeather(time, delta);
     if (this.playerGlow && this.playerSprite) {
       this.playerGlow.setPosition(this.playerSprite.x, this.playerSprite.y);
@@ -329,6 +353,7 @@ export class OverworldScene extends Phaser.Scene {
         if (this.playerGlow) {
           this.playerGlow.setPosition(this.playerSprite.x, this.playerSprite.y);
         }
+        this.updateMiniMapPlayerPosition(this.playerSprite.x / this.tileSize, this.playerSprite.y / this.tileSize);
       },
       onComplete: () => {
         this.isMoving = false;
@@ -336,6 +361,7 @@ export class OverworldScene extends Phaser.Scene {
         if (this.playerGlow) {
           this.playerGlow.setPosition(this.playerSprite.x, this.playerSprite.y);
         }
+        this.updateMiniMapPlayerPosition(targetX, targetY);
         this.onStepComplete(targetX, targetY);
       }
     });
@@ -455,6 +481,10 @@ export class OverworldScene extends Phaser.Scene {
     // Dynamic BGM and Weather Zone transitions (Pillar 4)
     this.updateOverworldBgm(x, y);
     this.updateWeatherZone(x, y);
+
+    // Dynamic Waypoint Discovery & Mini-Map update (Pillar 5)
+    this.checkWaypointDiscovery(x, y);
+    this.updateMiniMapPlayerPosition(x, y);
   }
 
   private renderChampionNpc() {
@@ -830,6 +860,7 @@ export class OverworldScene extends Phaser.Scene {
     Sound.playCatchSuccess();
     const item = ITEMS[pickup.itemId];
     this.logText.setText(`🎁 Found a ${item?.name || 'Item'}! Added to your Bag!`);
+    this.renderMiniMap();
 
     const toast = document.getElementById('save-toast');
     if (toast) {
@@ -2197,6 +2228,452 @@ export class OverworldScene extends Phaser.Scene {
     if (this.currentBgmTrack !== targetBgm) {
       this.currentBgmTrack = targetBgm;
       Sound.playBgm(targetBgm);
+    }
+  }
+
+  // =========================================================================
+  // Pillar 5: World Mini-Map Radar & Fast Travel Teleportation Hub
+  // =========================================================================
+
+  private setupMiniMapRadar() {
+    const savedWaypoints = localStorage.getItem('monster_proto_waypoints');
+    if (savedWaypoints) {
+      try {
+        const parsed = JSON.parse(savedWaypoints);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          this.unlockedWaypoints = parsed;
+        }
+      } catch {}
+    }
+
+    // Mini-map container in bottom-right corner
+    this.miniMapContainer = this.add.container(424, 274)
+      .setScrollFactor(0)
+      .setDepth(200);
+
+    // Frame backdrop: 96x72 (4:3 ratio matching 80x60 map)
+    const bg = this.add.rectangle(0, 0, 96, 72, 0x0f172a, 0.90)
+      .setStrokeStyle(1.5, 0x38bdf8);
+
+    // Header label & expand button
+    const label = this.add.text(-44, -32, '🗺️ RADAR', {
+      fontSize: '7px',
+      color: '#38bdf8',
+      fontStyle: 'bold'
+    }).setOrigin(0, 0);
+
+    const expandBtn = this.add.text(42, -32, '🔍 [M]', {
+      fontSize: '7px',
+      color: '#94a3b8'
+    }).setOrigin(1, 0);
+
+    this.miniMapGraphics = this.add.graphics();
+
+    // Blinking player position dot
+    this.miniMapPlayerDot = this.add.circle(0, 0, 2.5, 0x22c55e)
+      .setStrokeStyle(1, 0xffffff);
+
+    this.tweens.add({
+      targets: this.miniMapPlayerDot,
+      scale: { from: 0.8, to: 1.4 },
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    this.miniMapContainer.add([bg, this.miniMapGraphics, label, expandBtn, this.miniMapPlayerDot]);
+
+    // Make entire radar clickable to open Full World Map
+    bg.setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.toggleFullWorldMap());
+
+    this.renderMiniMap();
+  }
+
+  private renderMiniMap() {
+    if (!this.miniMapGraphics) return;
+    this.miniMapGraphics.clear();
+
+    const startX = -48;
+    const startY = -28;
+    const scale = 1.2; // 80 * 1.2 = 96, 60 * 1.2 = 72
+
+    // Biome zones
+    const zones = [
+      { x: 19, y: 3, w: 26, h: 16, color: 0x16a34a }, // Route 1
+      { x: 2, y: 20, w: 26, h: 29, color: 0x0284c7 }, // Lakeshore
+      { x: 2, y: 50, w: 20, h: 8, color: 0x0369a1 }, // Sunken Grotto
+      { x: 25, y: 20, w: 28, h: 38, color: 0x14532d }, // Old Grove
+      { x: 46, y: 2, w: 32, h: 23, color: 0x991b1b }, // Ember Crags
+      { x: 54, y: 26, w: 24, h: 12, color: 0xb45309 }, // Celestial Summit
+      { x: 56, y: 39, w: 22, h: 19, color: 0xca8a04 }, // Pagoda Dojo
+      { x: 4, y: 4, w: 14, h: 12, color: 0x475569 } // Pallet Plaza
+    ];
+
+    zones.forEach(z => {
+      this.miniMapGraphics!.fillStyle(z.color, 0.7);
+      this.miniMapGraphics!.fillRect(startX + z.x * scale, startY + z.y * scale, z.w * scale, z.h * scale);
+    });
+
+    // Uncollected treasure capsule specks
+    const rawCollected = localStorage.getItem('monster_proto_collected_items');
+    const collected: Record<string, boolean> = rawCollected ? JSON.parse(rawCollected) : {};
+    this.miniMapGraphics.fillStyle(0xfacc15, 0.9);
+    this.itemPickups.forEach(item => {
+      if (!collected[item.id]) {
+        this.miniMapGraphics!.fillCircle(startX + item.x * scale, startY + item.y * scale, 1.2);
+      }
+    });
+
+    // Waypoint landmark pins
+    WAYPOINTS.forEach(wp => {
+      const isUnlocked = canFastTravel(this.unlockedWaypoints, wp.id);
+      this.miniMapGraphics!.fillStyle(isUnlocked ? wp.color : 0x64748b, isUnlocked ? 1.0 : 0.5);
+      this.miniMapGraphics!.fillCircle(startX + wp.tile.x * scale, startY + wp.tile.y * scale, isUnlocked ? 2.0 : 1.2);
+    });
+
+    this.updateMiniMapPlayerPosition(this.playerTile.x, this.playerTile.y);
+  }
+
+  private updateMiniMapPlayerPosition(tileX: number, tileY: number) {
+    if (!this.miniMapPlayerDot) return;
+    const startX = -48;
+    const startY = -28;
+    const scale = 1.2;
+    this.miniMapPlayerDot.setPosition(startX + tileX * scale, startY + tileY * scale);
+  }
+
+  private checkWaypointDiscovery(x: number, y: number) {
+    const currentZone = this.mapData.zones.find(
+      (z: any) => x >= z.x1 && x <= z.x2 && y >= z.y1 && y <= z.y2
+    );
+    const zoneId = currentZone ? currentZone.zoneId : 'pallet_plaza';
+    const wp = getWaypointForZone(zoneId);
+    if (wp) {
+      const res = discoverWaypoint(this.unlockedWaypoints, wp.id);
+      if (res.isNew) {
+        this.unlockedWaypoints = res.unlocked;
+        localStorage.setItem('monster_proto_waypoints', JSON.stringify(this.unlockedWaypoints));
+        Sound.playLevelUp();
+        this.logText.setText(`📍 Waypoint Attuned: ${wp.name}! Fast Travel unlocked.`);
+        this.renderMiniMap();
+      }
+    }
+  }
+
+  public toggleFullWorldMap() {
+    if (this.fullWorldMapModal) {
+      this.fullWorldMapModal.destroy();
+      this.fullWorldMapModal = undefined;
+      Sound.playSelect();
+      return;
+    }
+
+    // Dismiss any open prompts
+    if (this.championPromptContainer) {
+      this.championPromptContainer.destroy();
+      this.championPromptContainer = undefined;
+    }
+    if (this.gymLeaderPromptContainer) {
+      this.gymLeaderPromptContainer.destroy();
+      this.gymLeaderPromptContainer = undefined;
+    }
+    if (this.signDialogContainer) {
+      this.signDialogContainer.destroy();
+      this.signDialogContainer = undefined;
+    }
+
+    Sound.playSelect();
+
+    const container = this.add.container(240, 160).setScrollFactor(0).setDepth(300);
+    this.fullWorldMapModal = container;
+
+    // Fullscreen dim overlay
+    const overlay = this.add.rectangle(0, 0, 480, 320, 0x000000, 0.75)
+      .setInteractive();
+
+    // Modal background
+    const modalBg = this.add.rectangle(0, 0, 444, 280, 0x0f172a)
+      .setStrokeStyle(2, 0x38bdf8);
+
+    // Header
+    const title = this.add.text(-205, -125, '🗺️ REGIONAL WORLD MAP & FAST TRAVEL', {
+      fontSize: '12px',
+      color: '#38bdf8',
+      fontStyle: 'bold'
+    }).setOrigin(0, 0);
+
+    const subtitle = this.add.text(-205, -111, 'Select an attuned waypoint to fast travel, or Town Return to Pallet Plaza.', {
+      fontSize: '8px',
+      color: '#94a3b8'
+    }).setOrigin(0, 0);
+
+    const closeBtn = this.add.text(205, -125, '✕ [M]', {
+      fontSize: '11px',
+      color: '#f8fafc',
+      fontStyle: 'bold'
+    }).setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.toggleFullWorldMap());
+
+    // --- Left Map Canvas ---
+    const mapScale = 3.0; // 80 * 3 = 240, 60 * 3 = 180
+    const mapStartX = -205;
+    const mapStartY = -95;
+
+    const mapBg = this.add.rectangle(mapStartX + 120, mapStartY + 90, 240, 180, 0x020617)
+      .setStrokeStyle(1.5, 0x334155);
+
+    const mapGfx = this.add.graphics();
+
+    // Render Biome regions
+    const biomes = [
+      { x: 19, y: 3, w: 26, h: 16, color: 0x16a34a, label: 'Route 1' },
+      { x: 2, y: 20, w: 26, h: 29, color: 0x0284c7, label: 'Lake Azure' },
+      { x: 2, y: 50, w: 20, h: 8, color: 0x0369a1, label: 'Grotto' },
+      { x: 25, y: 20, w: 28, h: 38, color: 0x14532d, label: 'Old Grove' },
+      { x: 46, y: 2, w: 32, h: 23, color: 0x991b1b, label: 'Ember Crags' },
+      { x: 54, y: 26, w: 24, h: 12, color: 0xb45309, label: 'Summit' },
+      { x: 56, y: 39, w: 22, h: 19, color: 0xca8a04, label: 'Dojo' },
+      { x: 4, y: 4, w: 14, h: 12, color: 0x475569, label: 'Town' }
+    ];
+
+    biomes.forEach(b => {
+      mapGfx.fillStyle(b.color, 0.65);
+      mapGfx.fillRect(mapStartX + b.x * mapScale, mapStartY + b.y * mapScale, b.w * mapScale, b.h * mapScale);
+    });
+
+    // Uncollected item specks
+    const rawCollected = localStorage.getItem('monster_proto_collected_items');
+    const collected: Record<string, boolean> = rawCollected ? JSON.parse(rawCollected) : {};
+    mapGfx.fillStyle(0xfacc15, 0.95);
+    this.itemPickups.forEach(item => {
+      if (!collected[item.id]) {
+        mapGfx.fillCircle(mapStartX + item.x * mapScale, mapStartY + item.y * mapScale, 2.5);
+      }
+    });
+
+    container.add([overlay, modalBg, title, subtitle, closeBtn, mapBg, mapGfx]);
+
+    // Region labels
+    biomes.forEach(b => {
+      const lbl = this.add.text(
+        mapStartX + (b.x + b.w / 2) * mapScale,
+        mapStartY + (b.y + b.h / 2) * mapScale,
+        b.label,
+        { fontSize: '8px', color: '#ffffffAA', fontStyle: 'bold' }
+      ).setOrigin(0.5);
+      container.add(lbl);
+    });
+
+    // Player position marker
+    const pX = mapStartX + this.playerTile.x * mapScale;
+    const pY = mapStartY + this.playerTile.y * mapScale;
+    const playerRing = this.add.circle(pX, pY, 7, 0x22c55e, 0.35).setStrokeStyle(1.5, 0x4ade80);
+    const playerDot = this.add.circle(pX, pY, 3, 0x22c55e).setStrokeStyle(1, 0xffffff);
+    const playerLbl = this.add.text(pX, pY - 11, 'YOU', {
+      fontSize: '7px',
+      color: '#4ade80',
+      backgroundColor: '#0f172aEE',
+      padding: { x: 2, y: 1 },
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    this.tweens.add({
+      targets: playerRing,
+      scale: { from: 0.9, to: 1.5 },
+      alpha: { from: 0.6, to: 0.1 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1
+    });
+
+    container.add([playerRing, playerDot, playerLbl]);
+
+    // --- Right Inspector Area ---
+    const rightStartX = 50;
+    const rightStartY = -95;
+    const rightW = 155;
+    const rightH = 180;
+
+    const detailCardBg = this.add.rectangle(rightStartX + rightW / 2, rightStartY + rightH / 2, rightW, rightH, 0x1e293b)
+      .setStrokeStyle(1.5, 0x334155);
+    container.add(detailCardBg);
+
+    const inspectorElements: Phaser.GameObjects.GameObject[] = [];
+
+    const renderInspector = (wpId: string) => {
+      inspectorElements.forEach(el => el.destroy());
+      inspectorElements.length = 0;
+
+      const wp = getWaypoint(wpId) || WAYPOINTS[0];
+      const isUnlocked = canFastTravel(this.unlockedWaypoints, wp.id);
+      const isCurrent = (wp.tile.x === this.playerTile.x && wp.tile.y === this.playerTile.y);
+
+      const wpTitle = this.add.text(rightStartX + 8, rightStartY + 10, `${wp.icon} ${wp.name}`, {
+        fontSize: '11px',
+        color: '#f8fafc',
+        fontStyle: 'bold'
+      });
+
+      const wpSub = this.add.text(rightStartX + 8, rightStartY + 24, wp.subtitle, {
+        fontSize: '8px',
+        color: '#38bdf8'
+      });
+
+      const wpLevel = this.add.text(rightStartX + 8, rightStartY + 38, `📊 ${wp.levelRange}`, {
+        fontSize: '8px',
+        color: '#cbd5e1'
+      });
+
+      const wpDesc = this.add.text(rightStartX + 8, rightStartY + 52, wp.description, {
+        fontSize: '7px',
+        color: '#94a3b8',
+        wordWrap: { width: 140 }
+      });
+
+      const wpWild = this.add.text(rightStartX + 8, rightStartY + 88, `🐾 Wild: ${wp.wildPreview}`, {
+        fontSize: '7px',
+        color: '#4ade80',
+        wordWrap: { width: 140 }
+      });
+
+      const wpGym = this.add.text(rightStartX + 8, rightStartY + 108, `⚔️ Gym: ${wp.gymLeader || 'Safe Zone'}`, {
+        fontSize: '7px',
+        color: '#fbbf24',
+        wordWrap: { width: 140 }
+      });
+
+      // Status Badge
+      const statusText = isCurrent ? '📍 CURRENT LOCATION' : (isUnlocked ? '✅ ATTUNED' : '🔒 UNDISCOVERED');
+      const statusColor = isCurrent ? 0x0284c7 : (isUnlocked ? 0x16a34a : 0x475569);
+      const statusBadge = this.add.rectangle(rightStartX + rightW / 2, rightStartY + 130, 140, 18, statusColor)
+        .setStrokeStyle(1, 0xffffff);
+      const statusTxt = this.add.text(rightStartX + rightW / 2, rightStartY + 130, statusText, {
+        fontSize: '8px',
+        color: '#ffffff',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+
+      // Fast Travel Action Button
+      const canWarp = isUnlocked && !isCurrent;
+      const warpBtn = this.add.rectangle(
+        rightStartX + rightW / 2,
+        rightStartY + 158,
+        140,
+        24,
+        canWarp ? 0x8b5cf6 : 0x334155
+      );
+      if (canWarp) {
+        warpBtn.setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => this.teleportToWaypoint(wp));
+      }
+
+      const warpTxt = this.add.text(
+        rightStartX + rightW / 2,
+        rightStartY + 158,
+        isCurrent ? 'Here Right Now' : (canWarp ? '⚡ Fast Travel' : 'Locked'),
+        {
+          fontSize: '9px',
+          color: canWarp ? '#ffffff' : '#64748b',
+          fontStyle: 'bold'
+        }
+      ).setOrigin(0.5);
+
+      const items = [wpTitle, wpSub, wpLevel, wpDesc, wpWild, wpGym, statusBadge, statusTxt, warpBtn, warpTxt];
+      inspectorElements.push(...items);
+      container.add(items);
+    };
+
+    // Render interactive Waypoint Pins on map
+    WAYPOINTS.forEach(wp => {
+      const pinX = mapStartX + wp.tile.x * mapScale;
+      const pinY = mapStartY + wp.tile.y * mapScale;
+      const isUnlocked = canFastTravel(this.unlockedWaypoints, wp.id);
+
+      const pinCircle = this.add.circle(pinX, pinY, 9, isUnlocked ? wp.color : 0x334155)
+        .setStrokeStyle(1.5, 0xffffff);
+
+      const pinTxt = this.add.text(pinX, pinY, isUnlocked ? wp.icon : '🔒', {
+        fontSize: '8px'
+      }).setOrigin(0.5);
+
+      const pinZone = this.add.zone(pinX, pinY, 20, 20)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          this.selectedWaypointId = wp.id;
+          Sound.playSelect();
+          renderInspector(wp.id);
+        });
+
+      container.add([pinCircle, pinTxt, pinZone]);
+    });
+
+    renderInspector(this.selectedWaypointId);
+
+    // --- Bottom Action Bar ---
+    const townReturnBtn = this.add.rectangle(mapStartX + 120, 115, 240, 26, 0x0284c7)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => {
+        const pallet = getWaypoint('pallet_town') || WAYPOINTS[0];
+        this.teleportToWaypoint(pallet);
+      });
+
+    const townReturnTxt = this.add.text(mapStartX + 120, 115, '🏠 Town Return (Pallet Plaza Clinic)', {
+      fontSize: '10px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    const progressTxt = this.add.text(rightStartX + rightW / 2, 115, `Attuned: ${this.unlockedWaypoints.length} / ${WAYPOINTS.length}`, {
+      fontSize: '9px',
+      color: '#94a3b8',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    container.add([townReturnBtn, townReturnTxt, progressTxt]);
+  }
+
+  public teleportToWaypoint(wp: WaypointDef) {
+    if (this.fullWorldMapModal) {
+      this.fullWorldMapModal.destroy();
+      this.fullWorldMapModal = undefined;
+    }
+
+    Sound.playRevitalize();
+    this.cameras.main.flash(350, 14, 165, 233);
+
+    // Relocate player
+    this.playerTile = { x: wp.tile.x, y: wp.tile.y };
+    const px = wp.tile.x * this.tileSize + 8;
+    const py = wp.tile.y * this.tileSize + 8;
+    this.playerSprite.setPosition(px, py);
+
+    // Relocate companion to safe adjacent tile
+    const compX = (wp.tile.x - 1) * this.tileSize + 8;
+    const compY = wp.tile.y * this.tileSize + 8;
+    this.companionTile = { x: wp.tile.x - 1, y: wp.tile.y };
+    this.companionSprite?.setPosition(compX, compY - 2);
+    this.companionShadow?.setPosition(compX, compY + 5);
+
+    // Update player glow, camera, BGM and weather
+    this.playerGlow?.setPosition(px, py);
+    this.cameras.main.centerOn(px, py);
+    this.updateOverworldBgm(wp.tile.x, wp.tile.y);
+    this.updateWeatherZone(wp.tile.x, wp.tile.y);
+    this.updateMiniMapPlayerPosition(wp.tile.x, wp.tile.y);
+
+    MultiplayerManager.getInstance().sendMove(wp.tile.x, wp.tile.y);
+
+    this.logText.setText(`⚡ Fast traveled to ${wp.name}!`);
+
+    const toast = document.getElementById('save-toast');
+    if (toast) {
+      toast.innerText = `⚡ Fast traveled to ${wp.name}!`;
+      toast.style.background = '#8b5cf6';
+      toast.style.opacity = '1';
+      setTimeout(() => (toast.style.opacity = '0'), 1800);
     }
   }
 }

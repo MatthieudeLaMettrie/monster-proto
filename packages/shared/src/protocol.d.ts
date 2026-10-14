@@ -179,6 +179,7 @@ export declare const SaveStateSchema: z.ZodObject<{
     }>, "many">;
     dex: z.ZodRecord<z.ZodString, z.ZodBoolean>;
     badges: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodBoolean>>;
+    waypoints: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     posX: number;
     posY: number;
@@ -221,6 +222,7 @@ export declare const SaveStateSchema: z.ZodObject<{
     }[];
     dex: Record<string, boolean>;
     badges?: Record<string, boolean> | undefined;
+    waypoints?: string[] | undefined;
 }, {
     posX: number;
     posY: number;
@@ -263,5 +265,6 @@ export declare const SaveStateSchema: z.ZodObject<{
     }[];
     dex: Record<string, boolean>;
     badges?: Record<string, boolean> | undefined;
+    waypoints?: string[] | undefined;
 }>;
 export type SaveStatePayload = z.infer<typeof SaveStateSchema>;
